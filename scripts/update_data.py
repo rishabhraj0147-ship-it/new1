@@ -422,9 +422,12 @@ def price_block(name: str, ticker: str, region: str, group: str, history=_histor
             return None
         intra = history(ticker, "5d", "15m")
         closes = [float(x) for x in daily.tolist()]
-        last = float(intra.iloc[-1]) if intra is not None and len(intra) else closes[-1]
-        same_day = intra is not None and len(intra) and daily.index[-1].date() == intra.index[-1].date()
-        prev = closes[-2] if len(closes) >= 2 and (same_day or intra is None or not len(intra)) else closes[-1]
+        has_intra = intra is not None and len(intra) > 0
+        last = float(intra.iloc[-1]) if has_intra else closes[-1]
+        last_day = (intra.index[-1] if has_intra else daily.index[-1]).date()
+        # previous close = last daily close from a day BEFORE the latest price
+        earlier = [float(v) for t, v in daily.items() if t.date() < last_day]
+        prev = earlier[-1] if earlier else closes[0]
         out = {"name": name, "ticker": ticker, "region": region, "group": group, "last": last, "prev": prev,
                "change_pct": (last / prev - 1) * 100 if prev else 0.0, "spark": closes[-22:],
                "as_of": (intra.index[-1] if intra is not None and len(intra) else daily.index[-1]).isoformat()}
