@@ -1,0 +1,51 @@
+# WorldPulse: refreshes returns for every listed stock on NSE, BSE, NYSE, NASDAQ and NYSE American.
+# Runs after the Indian close and after the US close. The 15-minute workflow publishes the result.
+name: Update all listed stocks
+
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"    # 5:00 pm IST, after NSE/BSE close
+    - cron: "45 21 * * 1-5"    # after the US close
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["scripts/update_universe.py", ".github/workflows/update-universe.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: worldpulse-universe
+  cancel-in-progress: false
+
+jobs:
+  universe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Fetch all listed stocks
+        run: python scripts/update_universe.py
+
+      - name: Save to repository
+        run: |
+          git config user.name "worldpulse-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/universe.json || true
+          if git diff --cached --quiet; then
+            echo "Nothing changed"
+            exit 0
+          fi
+          git commit -m "Update all listed stocks $(date -u +'%Y-%m-%d %H:%M UTC')"
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && break
+            sleep 10
+          done

@@ -192,8 +192,8 @@ const POLL_MS = 60000;                      // check for new data every minute
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 let NEWS = null, PRICES = null, PERF = null, FUNDS = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
 const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following",
-  tk:"Indian stocks", tp:"1Y", tsort:null, tdir:-1, fcat:"",
-  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:""};
+  tk:"All listed stocks", tp:"1Y", tsort:null, tdir:-1, fcat:"",
+  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50};
 
 const LS = "worldpulse:v1";
 let ME = load();
@@ -364,7 +364,8 @@ function renderMarkets(){
 
 
 /* ================= TOP PERFORMERS ================= */
-const TKINDS = ["Indian stocks","US stocks","Global stocks","Mutual funds","ETFs","Commodities"];
+const TKINDS = ["All listed stocks","Indian stocks","US stocks","Global stocks","Mutual funds","ETFs","Commodities"];
+let UNIV = null, univLoading = false;
 function topRows(){
   if (UI.tk === "Mutual funds") return (FUNDS ? FUNDS.funds : []).filter(f => !UI.fcat || f.category === UI.fcat);
   if (!PERF) return [];
@@ -374,6 +375,7 @@ function topRows(){
   return PERF.stocks.filter(x => x.market === m);
 }
 function renderTop(){
+  if (UI.tk === "All listed stocks") return renderUniverse();
   const fund = UI.tk === "Mutual funds";
   const periods = fund ? [["1M","m1"],["6M","m6"],["1Y","y1"],["3Y","y3"],["5Y","y5"]] : [["1D","d1"],["1W","w1"],["1M","m1"],["6M","m6"],["1Y","y1"]];
   if (!periods.some(p => p[0] === UI.tp)) UI.tp = "1Y";
@@ -403,6 +405,48 @@ function renderTop(){
     </tbody></table></div>
     <p class="disc">For education only. Rankings show past returns, which don't predict future returns. This is not a recommendation to buy or sell any stock, fund or commodity.</p>`;
   if ($("#fcat")) $("#fcat").onchange = e => { UI.fcat = e.target.value; renderTop(); };
+}
+
+
+async function loadUniverse(){
+  if (UNIV || univLoading) return; univLoading = true;
+  try{ UNIV = await getJSON("data/universe.json"); }catch(e){ UNIV = {rows:[], cols:[], count:0, missing:true}; }
+  univLoading = false; if (view()==="top" && UI.tk==="All listed stocks") renderUniverse();
+}
+function renderUniverse(){
+  const head = `<h1>Top performers</h1>
+    <span class="seg" data-seg="tk">${TKINDS.map(k=>`<button aria-pressed="${UI.tk===k}">${k}</button>`).join("")}</span>`;
+  if (!UNIV){ $("#view").innerHTML = head + `<p class="sub" style="margin-top:16px">Loading every listed stock…</p>`; loadUniverse(); return; }
+  if (UNIV.missing || !UNIV.rows.length){ $("#view").innerHTML = head + `<p class="sub" style="margin-top:16px">The full stock list is built twice a day after market close. It will appear here after the next run.</p>`; return; }
+  const P = [["1D",4],["1W",5],["1M",6],["6M",7],["1Y",8]], col = (P.find(p=>p[0]===UI.up)||P[0])[1];
+  const ex = UNIV.by_exchange || {}, q = UI.uq.trim().toLowerCase();
+  let rows = UNIV.rows.filter(r => r[col] != null);
+  if (UI.ux === "India") rows = rows.filter(r => r[2]==="NSE" || r[2]==="BSE");
+  else if (UI.ux === "US") rows = rows.filter(r => r[2]!=="NSE" && r[2]!=="BSE");
+  else if (UI.ux) rows = rows.filter(r => r[2] === UI.ux);
+  if (q) rows = rows.filter(r => r[0].toLowerCase().includes(q) || r[1].toLowerCase().includes(q));
+  rows.sort((a,b) => (b[col]-a[col]) * (UI.udir < 0 ? 1 : -1));
+  const cur = r => (r[2]==="NSE"||r[2]==="BSE") ? "₹" : "$";
+  const cell = v => v == null ? `<td class="n">–</td>` : `<td class="n ${v>=0?"pos":"neg"}">${pct(v)}</td>`;
+  $("#view").innerHTML = head + `
+    <p class="sub" style="margin-top:12px">${UNIV.count.toLocaleString()} listed stocks · ${Object.entries(ex).map(([k,v])=>`${esc(k)} ${v.toLocaleString()}`).join(" · ")}. Closing prices, refreshed after each market close (last ${ago(UNIV.updated)}).</p>
+    <div class="filters">
+      <div class="field"><label for="uq">Find a company</label><input type="search" id="uq" placeholder="Name or symbol, e.g. Tata, INFY, Apple" value="${esc(UI.uq)}"></div>
+      <div class="field"><label for="ux">Exchange</label><select id="ux"><option value="">All exchanges</option><option value="India" ${UI.ux==="India"?"selected":""}>India (NSE + BSE)</option><option value="US" ${UI.ux==="US"?"selected":""}>US (all)</option>${Object.keys(ex).map(k=>`<option ${UI.ux===k?"selected":""}>${esc(k)}</option>`).join("")}</select></div>
+    </div>
+    <div class="filters2">
+      <span class="lbl">Rank by</span><span class="seg" data-seg="up">${P.map(p=>`<button aria-pressed="${UI.up===p[0]}">${p[0]}</button>`).join("")}</span>
+      <span class="seg" data-seg="uord"><button aria-pressed="${UI.udir<0}">Top gainers</button><button aria-pressed="${UI.udir>0}">Top losers</button></span>
+    </div>
+    <h2>${rows.length.toLocaleString()} ${rows.length===1?"stock":"stocks"}</h2>
+    <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th>${P.map(p=>`<th class="n">${p[0]}${p[1]===col?(UI.udir<0?" ↓":" ↑"):""}</th>`).join("")}</tr></thead><tbody>
+      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td>${esc(r[1])}<small>${esc(r[0])} · ${esc(r[2])}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}</tr>`).join("")}
+    </tbody></table></div>
+    ${rows.length > UI.ulim ? `<button class="btn more" id="umore">Show more (${(rows.length-UI.ulim).toLocaleString()} left)</button>` : ""}
+    <p class="disc">For education only. Very small or rarely traded stocks can show extreme percentage moves. Past returns don't predict future returns; this is not a recommendation to buy or sell.</p>`;
+  const u = $("#uq"); u.oninput = () => { UI.uq = u.value; UI.ulim = 50; const pos = u.selectionStart; renderUniverse(); const n = $("#uq"); n.focus(); n.setSelectionRange(pos,pos); };
+  $("#ux").onchange = e => { UI.ux = e.target.value; UI.ulim = 50; renderUniverse(); };
+  if ($("#umore")) $("#umore").onclick = () => { UI.ulim += 50; renderUniverse(); };
 }
 
 /* ================= INVESTMENT PLANNER ================= */
@@ -695,7 +739,8 @@ document.addEventListener("click", e => {
   if (t.dataset.seen){ ME.topics[t.dataset.seen].lastSeen = new Date().toISOString(); save(); render(); return; }
   if (t.dataset.untopic){ delete ME.topics[t.dataset.untopic]; save(); render(); return; }
   const seg = t.parentElement.dataset.seg;
-  if (seg){ UI[seg] = t.textContent; UI.limit = 40; if (seg === "tk" || seg === "tp") UI.tsort = null; render(); }
+  if (seg === "uord"){ UI.udir = t.textContent === "Top losers" ? 1 : -1; UI.ulim = 50; render(); return; }
+  if (seg){ UI[seg] = t.textContent; UI.limit = 40; UI.ulim = 50; if (seg === "tk" || seg === "tp") UI.tsort = null; render(); }
 });
 
 refresh(true);
