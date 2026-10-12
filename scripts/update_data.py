@@ -411,7 +411,8 @@ def _history(ticker: str, period: str, interval: str):
     if df is None or df.empty:
         return None
     s = df["Close"].dropna()
-    s.index = s.index.tz_convert("UTC") if s.index.tz is not None else s.index.tz_localize("UTC")
+    if s.index.tz is None:              # keep the exchange's own time zone so "today" means the market's today
+        s.index = s.index.tz_localize("UTC")
     return s
 
 
@@ -430,9 +431,9 @@ def price_block(name: str, ticker: str, region: str, group: str, history=_histor
         prev = earlier[-1] if earlier else closes[0]
         out = {"name": name, "ticker": ticker, "region": region, "group": group, "last": last, "prev": prev,
                "change_pct": (last / prev - 1) * 100 if prev else 0.0, "spark": closes[-22:],
-               "as_of": (intra.index[-1] if intra is not None and len(intra) else daily.index[-1]).isoformat()}
+               "as_of": (intra.index[-1] if has_intra else daily.index[-1]).tz_convert("UTC").isoformat()}
         if intra is not None and len(intra):
-            out["intraday"] = [[t.isoformat(), round(float(v), 4)] for t, v in intra.items()]
+            out["intraday"] = [[t.tz_convert("UTC").isoformat(), round(float(v), 4)] for t, v in intra.items()]
         return out
     except Exception as exc:
         print(f"  price failed {name} ({ticker}): {exc}", file=sys.stderr)
