@@ -7,22 +7,26 @@
 <meta name="description" content="World news from 30 sources, tagged with its likely impact on share markets. Updates every 15 minutes.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: header + market ribbon, then one view at a time (News / Markets / Tracker / Sources); a story opens in a side reader */
 :root{
-  --bg:#F5F6F3; --surface:#FFFFFF; --sunk:#ECEEEA; --ink:#15201C; --muted:#5E6B66; --line:#DCE1DD;
-  --accent:#1D5BD8; --accent-soft:#E6EDFC; --up:#0A7A4F; --up-soft:#E3F3EB; --down:#C0362C; --down-soft:#FBE7E5;
-  --watch:#9A5B00; --watch-soft:#FBF0DC; --hi:#C0362C; --med:#C77400;
-  --f-head:"Newsreader", Georgia, "Times New Roman", serif;
-  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --bg:#FAF7FF; --surface:#FFFFFF; --sunk:#F1ECFB; --ink:#1E1646; --muted:#625C80; --line:#E6DFF5;
+  --accent:#6B3CF0; --accent-soft:#EEE8FE; --up:#0B8A5C; --up-soft:#DDF7EB; --down:#D6304F; --down-soft:#FFE6EB;
+  --watch:#A35A00; --watch-soft:#FFF1D6; --hi:#E5285A; --med:#F08A00;
+  --c-news:#F0386B; --c-markets:#0FA3A0; --c-top:#6B3CF0; --c-ipo:#F28A0C; --c-planner:#13A35C; --c-tracker:#2E7BEF;
+  --sec:var(--c-news); --hdr1:#24175E; --hdr2:#4B1FA6;
+  --f-head:"Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"Figtree", "Segoe UI", system-ui, sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#0F1412; --surface:#161D1A; --sunk:#1D2622; --ink:#E6ECE9; --muted:#97A39E; --line:#28322E;
-  --accent:#7EA6FF; --accent-soft:#1B2740; --up:#46C08A; --up-soft:#15291F; --down:#F07A6E; --down-soft:#341A17;
-  --watch:#E7B25A; --watch-soft:#33270F; --hi:#F07A6E; --med:#E7A54A; color-scheme:dark}}
+  --bg:#130F26; --surface:#1C1736; --sunk:#262046; --ink:#F1EDFF; --muted:#A9A2CC; --line:#332B5A;
+  --accent:#A98BFF; --accent-soft:#2B2258; --up:#4FD69B; --up-soft:#16352A; --down:#FF7E96; --down-soft:#3E1A28;
+  --watch:#FFC566; --watch-soft:#3A2A10; --hi:#FF6F96; --med:#FFAE4A;
+  --c-news:#FF6F96; --c-markets:#35D0C8; --c-top:#A98BFF; --c-ipo:#FFAE4A; --c-planner:#4FD69B; --c-tracker:#6FA8FF;
+  --hdr1:#1A1240; --hdr2:#3A1784; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
@@ -200,6 +204,88 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 .catmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:14px 0}
 .legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:6px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- colour theme: every section has its own colour (--sec) ---------- */
+body[data-v="news"]{--sec:var(--c-news)} body[data-v="markets"]{--sec:var(--c-markets)} body[data-v="top"]{--sec:var(--c-top)}
+body[data-v="ipo"]{--sec:var(--c-ipo)} body[data-v="planner"]{--sec:var(--c-planner)} body[data-v="tracker"]{--sec:var(--c-tracker)}
+body{background:
+  radial-gradient(900px 520px at 100% 0%, color-mix(in srgb,var(--sec) 14%,transparent), transparent 70%),
+  radial-gradient(700px 480px at 0% 30%, color-mix(in srgb,var(--c-markets) 9%,transparent), transparent 70%),
+  radial-gradient(800px 600px at 60% 100%, color-mix(in srgb,var(--c-ipo) 8%,transparent), transparent 70%),
+  var(--bg);background-attachment:fixed;transition:background-color .3s}
+.num{font-variant-numeric:tabular-nums;font-weight:600}
+header{background:linear-gradient(100deg,var(--hdr1),var(--hdr2) 60%,color-mix(in srgb,var(--sec) 55%,var(--hdr2)));border-bottom:0;color:#fff;box-shadow:0 6px 24px color-mix(in srgb,var(--hdr2) 30%,transparent)}
+.logo{color:#fff;font-weight:800;letter-spacing:-.02em;font-size:26px}
+.logo span{color:transparent;background:linear-gradient(90deg,#FFB86B,#FF6F96 50%,#B79CFF);-webkit-background-clip:text;background-clip:text}
+nav a{color:rgba(255,255,255,.78);display:flex;align-items:center;gap:7px;border-radius:999px;padding:6px 13px}
+nav a::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--dc)}
+nav a[data-v="news"]{--dc:var(--c-news)} nav a[data-v="markets"]{--dc:var(--c-markets)} nav a[data-v="top"]{--dc:#B79CFF}
+nav a[data-v="ipo"]{--dc:var(--c-ipo)} nav a[data-v="planner"]{--dc:var(--c-planner)} nav a[data-v="tracker"]{--dc:#6FA8FF}
+nav a:hover{background:rgba(255,255,255,.1);color:#fff}
+nav a[aria-current="page"]{background:#fff;color:var(--hdr1);font-weight:700}
+.live{color:rgba(255,255,255,.75)}
+.gs input{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff}
+.gs input::placeholder{color:rgba(255,255,255,.65)}
+.gsr{color:var(--ink)}
+.ribbon{border-top:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.9)}
+.ribbon .pos{color:#7DF0B9} .ribbon .neg{color:#FF9DB0}
+.edu{background:linear-gradient(90deg,var(--watch-soft),color-mix(in srgb,var(--c-news) 10%,var(--watch-soft)));border-bottom:0}
+h1{font-weight:800;letter-spacing:-.025em;position:relative;padding-bottom:10px;margin-bottom:10px}
+h1::after{content:"";position:absolute;left:0;bottom:0;width:72px;height:6px;border-radius:6px;background:linear-gradient(90deg,var(--sec),color-mix(in srgb,var(--sec) 35%,#FFB86B))}
+.reader h1::after{display:none}
+h2{font-weight:700;letter-spacing:-.015em;color:color-mix(in srgb,var(--sec) 45%,var(--ink))}
+.field label,.lbl,th,.stat .k,.kv b,.box h3,.gl b,.ill .lab,.lvl{text-transform:none;letter-spacing:0}
+.field label,.lbl{font-size:13px}
+.lead .kick{text-transform:none;letter-spacing:0;font-size:13px}
+input[type=search],input[type=text],input[type=password],select,textarea,.form input[type=number]{border-radius:12px;border-width:1.5px}
+input:focus,select:focus,textarea:focus{border-color:var(--sec);outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--sec) 18%,transparent)}
+:focus-visible{outline-color:var(--sec)}
+.seg{border-radius:999px;border-width:1.5px;padding:3px;gap:2px}
+.seg button{border-radius:999px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--sec);color:#fff;box-shadow:0 3px 10px color-mix(in srgb,var(--sec) 35%,transparent)}
+.btn{border-radius:999px;border-width:1.5px;font-weight:500}
+.btn:hover{border-color:var(--sec);color:var(--sec)}
+.btn.primary{background:linear-gradient(135deg,var(--sec),color-mix(in srgb,var(--sec) 60%,#7A3CF0));border-color:transparent;color:#fff;box-shadow:0 4px 14px color-mix(in srgb,var(--sec) 35%,transparent)}
+.btn.primary:hover{color:#fff;filter:brightness(1.06)}
+.btn.on{background:var(--sec);border-color:var(--sec);color:#fff}
+.chip{border-width:0;background:var(--sunk);font-weight:500}
+.lvl.High{background:linear-gradient(135deg,#FF4D7A,#E5285A)} .lvl.Medium{background:linear-gradient(135deg,#FFB020,#F07A00)}
+/* cards get colour-tinted shadows instead of flat grey */
+.topcard,.tile,.stat,.tcard,.form,.lead,.stile{border-color:transparent;border-radius:18px;box-shadow:0 1px 2px rgba(30,22,70,.06),0 8px 24px color-mix(in srgb,var(--sec) 10%,transparent)}
+.topcard:hover{box-shadow:0 14px 34px color-mix(in srgb,var(--sec) 22%,transparent)}
+.lead{border-radius:22px;background:linear-gradient(135deg,var(--surface) 55%,color-mix(in srgb,var(--sec) 9%,var(--surface)))}
+.lead .t,.topcard .t,.story .t{letter-spacing:-.01em}
+.art{border-radius:14px}
+.gl div{border-radius:14px;border-left:4px solid}
+.gl .g{border-color:var(--up)} .gl .l{border-color:var(--down)}
+.box{border-radius:16px;background:color-mix(in srgb,var(--sec) 7%,var(--sunk))}
+/* market tiles and stat cards cycle through the palette */
+.tile,.stat{position:relative;overflow:hidden}
+.tile::before,.stat::before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:var(--tc,var(--sec))}
+.tiles > :nth-child(6n+1),.stats > :nth-child(6n+1),.res > :nth-child(6n+1){--tc:var(--c-news)}
+.tiles > :nth-child(6n+2),.stats > :nth-child(6n+2),.res > :nth-child(6n+2){--tc:var(--c-markets)}
+.tiles > :nth-child(6n+3),.stats > :nth-child(6n+3),.res > :nth-child(6n+3){--tc:var(--c-top)}
+.tiles > :nth-child(6n+4),.stats > :nth-child(6n+4),.res > :nth-child(6n+4){--tc:var(--c-ipo)}
+.tiles > :nth-child(6n+5),.stats > :nth-child(6n+5),.res > :nth-child(6n+5){--tc:var(--c-planner)}
+.tiles > :nth-child(6n+6),.stats > :nth-child(6n+6),.res > :nth-child(6n+6){--tc:var(--c-tracker)}
+.stat{background:linear-gradient(160deg,color-mix(in srgb,var(--tc,var(--sec)) 9%,var(--surface)),var(--surface) 70%)}
+.stat .v{font-weight:700;color:color-mix(in srgb,var(--tc,var(--sec)) 55%,var(--ink))}
+/* tables */
+.tablewrap{background:var(--surface);border-radius:18px;box-shadow:0 8px 24px color-mix(in srgb,var(--sec) 9%,transparent)}
+th{color:color-mix(in srgb,var(--sec) 55%,var(--muted));font-weight:700;background:color-mix(in srgb,var(--sec) 7%,var(--surface))}
+.pt tbody tr:hover td{background:color-mix(in srgb,var(--sec) 6%,transparent)}
+.pt tr.top3 td:first-child{color:var(--sec)}
+.toast{background:linear-gradient(135deg,var(--hdr2),var(--sec))}
+.reader{border-left:6px solid var(--sec)}
+.disc{border-top:3px solid;border-image:linear-gradient(90deg,var(--c-news),var(--c-ipo),var(--c-planner),var(--c-markets),var(--c-top)) 1}
+@media (max-width:760px){
+  .hrow{gap:10px;padding-block:10px}
+  nav{order:4;flex-wrap:nowrap;overflow-x:auto;width:calc(100% + 40px);margin-inline:-20px;padding-inline:20px;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav a{white-space:nowrap;flex:none}
+  .live{font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){body{transition:none}}
 </style>
 </head>
 <body>
@@ -329,7 +415,7 @@ window.addEventListener("hashchange", () => { const h = location.hash; if (h.sta
 function render(){
   if (!NEWS) return;
   const v = view(); UI.lastView = v;
-  document.querySelectorAll("nav a").forEach(a => { if (a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  document.body.dataset.v = v; document.querySelectorAll("nav a").forEach(a => { if (a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); }); { const nv=document.querySelector("nav"), cur=nv && nv.querySelector("a[aria-current]"); if (cur && nv.scrollWidth>nv.clientWidth) nv.scrollLeft = cur.offsetLeft - (nv.clientWidth-cur.offsetWidth)/2; }
   renderRibbon();
   ({news:renderNews, markets:renderMarkets, top:renderTop, ipo:renderIPO, planner:renderPlanner, tracker:renderTracker, sources:renderSources})[v]();
   if (location.hash.startsWith("#story-") && !$("#readerHost").innerHTML) openStory(location.hash.slice(7));
