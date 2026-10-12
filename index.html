@@ -210,6 +210,7 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
       <a href="#news" data-v="news">News</a>
       <a href="#markets" data-v="markets">Markets</a>
       <a href="#top" data-v="top">Top performers</a>
+      <a href="#ipo" data-v="ipo">IPOs</a>
       <a href="#planner" data-v="planner">Investment planner</a>
       <a href="#tracker" data-v="tracker">My tracker</a>
     </nav>
@@ -229,10 +230,10 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 /* ================= state ================= */
 const POLL_MS = 60000;                      // check for new data every minute
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
-let NEWS = null, PRICES = null, PERF = null, FUNDS = null, ACTIVE = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
+let NEWS = null, PRICES = null, PERF = null, FUNDS = null, ACTIVE = null, IPO = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
 const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following",
   tk:"Most active today", tp:"1Y", tsort:null, tdir:-1, fcat:"",
-  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50, usec:"", usz:"", uv:"List", am:"India", as:"Volume"};
+  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50, usec:"", usz:"", uv:"List", am:"India", as:"Volume", acat:"", tcat:"", im:"India", iboard:"", icat:"", iq:"", isort:"Latest"};
 
 const LS = "worldpulse:v1";
 let ME = load();
@@ -292,10 +293,10 @@ async function getJSON(path){
 async function refresh(first){
   nextCheck = Date.now() + POLL_MS;
   try{
-    const [n, p, pf, fd, ac] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null), getJSON("data/performers.json").catch(()=>null), getJSON("data/funds.json").catch(()=>null), getJSON("data/active.json").catch(()=>null)]);
+    const [n, p, pf, fd, ac, ip] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null), getJSON("data/performers.json").catch(()=>null), getJSON("data/funds.json").catch(()=>null), getJSON("data/active.json").catch(()=>null), getJSON("data/ipo.json").catch(()=>null)]);
     const isNew = !NEWS || n.updated !== NEWS.updated;
     const fresh = NEWS ? n.articles.filter(a => !BYID[a.id]).length : 0;
-    NEWS = n; if (p) PRICES = p; if (pf) PERF = pf; if (fd) FUNDS = fd; if (ac) ACTIVE = ac; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
+    NEWS = n; if (p) PRICES = p; if (pf) PERF = pf; if (fd) FUNDS = fd; if (ac) ACTIVE = ac; if (ip) IPO = ip; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
     if (isNew || first){ if (view()!=="planner" || first) render(); if (!first && fresh) toast(`${fresh} new stor${fresh===1?"y":"ies"} – tap to see the latest`, () => { location.hash = "#news"; UI.sort="Latest"; render(); window.scrollTo({top:0}); }); }
     else renderRibbon();
   }catch(e){
@@ -323,14 +324,14 @@ function renderRibbon(){
 }
 
 /* ================= routing ================= */
-function view(){ const h = location.hash.replace("#",""); return ["news","markets","top","planner","tracker","sources"].includes(h) ? h : (h.startsWith("story-") ? (UI.lastView||"news") : "news"); }
+function view(){ const h = location.hash.replace("#",""); return ["news","markets","top","ipo","planner","tracker","sources"].includes(h) ? h : (h.startsWith("story-") ? (UI.lastView||"news") : "news"); }
 window.addEventListener("hashchange", () => { const h = location.hash; if (h.startsWith("#story-")) openStory(h.slice(7)); else { closeReader(false); render(); } });
 function render(){
   if (!NEWS) return;
   const v = view(); UI.lastView = v;
   document.querySelectorAll("nav a").forEach(a => { if (a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   renderRibbon();
-  ({news:renderNews, markets:renderMarkets, top:renderTop, planner:renderPlanner, tracker:renderTracker, sources:renderSources})[v]();
+  ({news:renderNews, markets:renderMarkets, top:renderTop, ipo:renderIPO, planner:renderPlanner, tracker:renderTracker, sources:renderSources})[v]();
   if (location.hash.startsWith("#story-") && !$("#readerHost").innerHTML) openStory(location.hash.slice(7));
 }
 
@@ -474,7 +475,10 @@ function topRows(){
   if (UI.tk === "ETFs") return PERF.etfs;
   if (UI.tk === "Commodities") return PERF.commodities;
   const m = {"Indian stocks":"India","US stocks":"US","Global stocks":"Global"}[UI.tk];
-  return PERF.stocks.filter(x => x.market === m);
+  const urow = t => UNIV && UNIV.rows.find(r => r[0] === t);
+  const st = PERF.stocks.filter(x => x.market === m);
+  st.forEach(x => { if (!x._c){ const u = urow(x.ticker); x._c = u ? rowCat(u) : catOf("", "", x.name); } });
+  return UI.tcat ? st.filter(x => x._c === UI.tcat) : st;
 }
 function heat(v){ if (v == null) return "var(--surface)"; const a = Math.min(Math.abs(v)/ (Math.abs(v) > 30 ? 60 : 20), 1) * .9 + .1;
   return `color-mix(in srgb, var(${v>=0?"--up-soft":"--down-soft"}) ${Math.round(a*100)}%, var(--surface))`; }
@@ -496,6 +500,7 @@ function renderTop(){
     <span class="seg" data-seg="tk">${TKINDS.map(k=>`<button aria-pressed="${UI.tk===k}">${k}</button>`).join("")}</span>
     <div class="filters2">
       <span class="lbl">Rank by</span><span class="seg" data-seg="tp">${periods.map(p=>`<button aria-pressed="${UI.tp===p[0]}">${p[0]}</button>`).join("")}</span>
+      ${!fund && /stocks/.test(UI.tk) && PERF ? `<select id="tcat" aria-label="Category" style="width:auto"><option value="">All categories</option>${CATS.map(c=>`<option ${UI.tcat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>` : ""}
       ${fund ? `<select id="fcat" aria-label="Fund category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${UI.fcat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>` : ""}
     </div>
     ${fund && FUNDS ? `<h2>Fund categories</h2><div class="catmap">${cats.map(c => { const fs = FUNDS.funds.filter(f=>f.category===c && f[key]!=null), avg = fs.length ? fs.reduce((a,f)=>a+f[key],0)/fs.length : null;
@@ -505,29 +510,35 @@ function renderTop(){
       ${periods.map(p=>`<th class="n" data-tsort="${p[1]}" ${p[1]===sortKey?'aria-sort="descending"':""}>${p[0]}${p[1]===sortKey?(UI.tdir<0?" ↓":" ↑"):""}</th>`).join("")}
       ${fund ? "<th></th>" : "<th>60 days</th>"}</tr></thead><tbody>
       ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td>
-        <td><button class="linkish" ${fund ? `data-fundchart="${esc(r.code)}"` : `data-chart="${esc(r.ticker)}"`}>${esc(r.name)}</button><small>${esc(fund ? r.category + " · " + r.house : (r.ticker + " · " + r.market))}</small></td>
+        <td><button class="linkish" ${fund ? `data-fundchart="${esc(r.code)}"` : `data-chart="${esc(r.ticker)}"`}>${esc(r.name)}</button><small>${esc(fund ? r.category + " · " + r.house : [r.ticker, r.market, r._c].filter(Boolean).join(" · "))}</small></td>
         <td class="n">${fund ? r.nav.toFixed(2) : fmt(r.last)}${fund?"":`<small>${r.currency==="INR"?"₹":"$"}</small>`}</td>
         ${periods.map(p=>cell(r[p[1]])).join("")}
         ${fund ? `<td><button class="btn" data-planfund="${esc(r.code)}">Plan with this fund</button></td>` : `<td>${spark(r.spark,90,26)}</td>`}</tr>`).join("")}
     </tbody></table></div>
     <p class="disc">For education only. Rankings show past returns, which don't predict future returns. This is not a recommendation to buy or sell any stock, fund or commodity.</p>`;
   if ($("#fcat")) $("#fcat").onchange = e => { UI.fcat = e.target.value; renderTop(); };
+  if ($("#tcat")) $("#tcat").onchange = e => { UI.tcat = e.target.value; renderTop(); };
+  if (/stocks/.test(UI.tk) && !UNIV) loadUniverse().then(() => { if (view()==="top") renderTop(); });
 }
 
 
 function sectorMap(rows, col){
   const g = {};
-  rows.forEach(r => { const k = r[10] || "Unclassified"; (g[k] = g[k] || []).push(r); });
+  rows.forEach(r => { const k = rowCat(r); (g[k] = g[k] || []).push(r); });
   const list = Object.entries(g).map(([k, rs]) => { const v = rs.map(r=>r[col]).filter(x=>x!=null).sort((a,b)=>a-b);
     const med = v.length ? v[Math.floor(v.length/2)] : null, best = rs.slice().sort((a,b)=>(b[col]??-1e9)-(a[col]??-1e9))[0];
     return {k, n: rs.length, med, best}; }).sort((a,b) => (b.med??-1e9) - (a.med??-1e9));
-  return `<h2>Sector map · median ${esc(UI.up)} return</h2><p class="note">Each tile is a sector, coloured by the median return of its companies. Tap a sector to list its stocks.</p>
+  return `<h2>Category map · median ${esc(UI.up)} return</h2><p class="note">Each tile is a category (IT, Pharma, Banking…), coloured by the median return of its companies. Tap one to list its stocks. Categories come from exchange sector data, or from the company name where none is published.</p>
     <div class="smap">${list.map(x=>`<button class="stile" data-sector="${esc(x.k)}" style="background:${heat(x.med)}"><span class="sn">${esc(x.k)}</span><span class="sv ${x.med>=0?"pos":"neg"}">${x.med==null?"–":pct(x.med)}</span><span class="sc">${x.n.toLocaleString()} stocks · best: ${esc((x.best&&x.best[1]||"").slice(0,22))}</span></button>`).join("")}</div>`;
 }
-async function loadUniverse(){
-  if (UNIV || univLoading) return; univLoading = true;
-  try{ UNIV = await getJSON("data/universe.json"); }catch(e){ UNIV = {rows:[], cols:[], count:0, missing:true}; }
-  univLoading = false; if (view()==="top" && UI.tk==="All listed stocks") renderUniverse();
+let univPromise = null;
+function loadUniverse(){
+  if (!univPromise) univPromise = (async () => {
+    try{ UNIV = await getJSON("data/universe.json"); }catch(e){ UNIV = {rows:[], cols:[], count:0, missing:true}; }
+    if (view()==="top" && UI.tk==="All listed stocks") renderUniverse();
+    if (view()==="ipo") renderIPO();
+  })();
+  return univPromise;
 }
 function renderUniverse(){
   const head = `<h1>Top performers</h1>
@@ -541,10 +552,10 @@ function renderUniverse(){
   else if (UI.ux === "US") rows = rows.filter(r => r[2]!=="NSE" && r[2]!=="BSE");
   else if (UI.ux) rows = rows.filter(r => r[2] === UI.ux);
   if (q) rows = rows.filter(r => r[0].toLowerCase().includes(q) || r[1].toLowerCase().includes(q));
-  const sectors = [...new Set(rows.map(r => r[10]).filter(Boolean))].sort(), sizes = ["Mega cap","Large cap","Mid cap","Small cap","Micro cap","Below top 750"].filter(z => rows.some(r => r[11]===z));
+  const cats = rows.map(rowCat), sizes = ["Mega cap","Large cap","Mid cap","Small cap","Micro cap","Below top 750"].filter(z => rows.some(r => r[11]===z));
   if (UI.usz) rows = rows.filter(r => r[11] === UI.usz);
   const base = rows;
-  if (UI.usec) rows = rows.filter(r => (r[10]||"Unclassified") === UI.usec);
+  if (UI.usec) rows = rows.filter(r => rowCat(r) === UI.usec);
   rows.sort((a,b) => (b[col]-a[col]) * (UI.udir < 0 ? 1 : -1));
   const cur = r => (r[2]==="NSE"||r[2]==="BSE") ? "₹" : "$";
   const cell = v => v == null ? `<td class="n">–</td>` : `<td class="n ${v>=0?"pos":"neg"}">${pct(v)}</td>`;
@@ -552,7 +563,7 @@ function renderUniverse(){
     <p class="sub" style="margin-top:12px">${UNIV.count.toLocaleString()} listed stocks · ${Object.entries(ex).map(([k,v])=>`${esc(k)} ${v.toLocaleString()}`).join(" · ")}. Closing prices, refreshed after each market close (last ${ago(UNIV.updated)}).</p>
     <div class="filters">
       <div class="field"><label for="uq">Find a company</label><input type="search" id="uq" placeholder="Name or symbol, e.g. Tata, INFY, Apple" value="${esc(UI.uq)}"></div>
-      <div class="field"><label for="usec">Sector</label><select id="usec"><option value="">All sectors</option>${sectors.map(x=>`<option ${UI.usec===x?"selected":""}>${esc(x)}</option>`).join("")}${base.some(r=>!r[10])?`<option ${UI.usec==="Unclassified"?"selected":""}>Unclassified</option>`:""}</select></div>
+      ${catSelect("usec", UI.usec, cats)}
       <div class="field"><label for="usz">Company size</label><select id="usz"><option value="">All sizes</option>${sizes.map(x=>`<option ${UI.usz===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
       <div class="field"><label for="ux">Exchange</label><select id="ux"><option value="">All exchanges</option><option value="India" ${UI.ux==="India"?"selected":""}>India (NSE + BSE)</option><option value="US" ${UI.ux==="US"?"selected":""}>US (all)</option>${Object.keys(ex).map(k=>`<option ${UI.ux===k?"selected":""}>${esc(k)}</option>`).join("")}</select></div>
     </div>
@@ -560,12 +571,12 @@ function renderUniverse(){
       <span class="lbl">Rank by</span><span class="seg" data-seg="up">${P.map(p=>`<button aria-pressed="${UI.up===p[0]}">${p[0]}</button>`).join("")}</span>
       <span class="seg" data-seg="uord"><button aria-pressed="${UI.udir<0}">Top gainers</button><button aria-pressed="${UI.udir>0}">Top losers</button></span>
     </div>
-    <div class="filters2"><span class="lbl">View</span><span class="seg" data-seg="uv">${["List","Sector map"].map(x=>`<button aria-pressed="${UI.uv===x}">${x}</button>`).join("")}</span>
-      ${UI.usec ? `<button class="btn" data-clearsec>Clear sector: ${esc(UI.usec)} ✕</button>` : ""}</div>
-    ${UI.uv === "Sector map" ? sectorMap(base, col) : `
+    <div class="filters2"><span class="lbl">View</span><span class="seg" data-seg="uv">${["List","Category map"].map(x=>`<button aria-pressed="${UI.uv===x}">${x}</button>`).join("")}</span>
+      ${UI.usec ? `<button class="btn" data-clearsec>Clear category: ${esc(UI.usec)} ✕</button>` : ""}</div>
+    ${UI.uv === "Category map" ? sectorMap(base, col) : `
     <h2>${rows.length.toLocaleString()} ${rows.length===1?"stock":"stocks"}</h2>
     <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th>${P.map(p=>`<th class="n">${p[0]}${p[1]===col?(UI.udir<0?" ↓":" ↑"):""}</th>`).join("")}</tr></thead><tbody>
-      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r[0])}">${esc(r[1])}</button><small>${esc([r[0], r[2], r[10], r[11]].filter(Boolean).join(" · "))}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}<td class="n">${bigNum(r[14], cur(r)==="₹")}</td></tr>`).join("")}
+      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r[0])}">${esc(r[1])}</button><small>${esc([r[0], r[2], rowCat(r), r[11]].filter(Boolean).join(" · "))}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}<td class="n">${bigNum(r[14], cur(r)==="₹")}</td></tr>`).join("")}
     </tbody></table></div>
     ${rows.length > UI.ulim ? `<button class="btn more" id="umore">Show more (${(rows.length-UI.ulim).toLocaleString()} left)</button>` : ""}`}
     <p class="disc">For education only. Very small or rarely traded stocks can show extreme percentage moves. Past returns don't predict future returns; this is not a recommendation to buy or sell.</p>`;
@@ -576,6 +587,40 @@ function renderUniverse(){
   if ($("#umore")) $("#umore").onclick = () => { UI.ulim += 50; renderUniverse(); };
 }
 
+
+
+/* ================= CATEGORY MAPPING (one list for India + US) ================= */
+const CATS = ["IT & Technology","Pharma & Healthcare","Banking & Finance","Oil, Gas & Energy","Power & Utilities","Auto & Auto Parts",
+  "FMCG & Staples","Consumer & Retail","Metals & Mining","Chemicals & Materials","Cement & Building Materials","Infrastructure & Capital Goods",
+  "Realty","Telecom & Media","Textiles","Others"];
+const CAT_RULES = [
+  ["Pharma & Healthcare", /pharma|biotech|drug|medic|health|hospital|life science|diagnos|clinic|remed|biolog/],
+  ["IT & Technology", /information technology|^technology|software|semiconductor|computer|internet|it services|edp|infotech|tech(nolog)?(ies|y)?\b|digital|systems ltd|\bdata\b|cyber/],
+  ["Banking & Finance", /bank|financ|insur|nbfc|capital market|invest|credit|asset manag|broker|securities|fintech|lending|savings|\bfin\b/],
+  ["Power & Utilities", /power|utilit|renewable|solar|\bwind\b|water supply|gas distribution|green energy/],
+  ["Oil, Gas & Energy", /\boil\b|\bgas\b|petrol|refin|\bcoal\b|consumable fuels|^energy|\blng\b|drilling/],
+  ["Auto & Auto Parts", /automobile|auto ?(parts|component|ancill)|\bauto\b|motor|vehicle|\btyres?\b|\btires?\b|tractor/],
+  ["Metals & Mining", /metal|mining|steel|alumin|copper|zinc|\biron\b|ispat|alloy|\bgold\b|precious/],
+  ["Textiles", /textile|spinning|cotton|\byarns?\b|fabric|garment|silk|denim|knit/],
+  ["Chemicals & Materials", /chemical|fertili|paint|plastic|polymer|paper|forest|packag|basic materials|specialty|pesticide|agrochem/],
+  ["FMCG & Staples", /fast moving|consumer staples|\bfoods?\b|beverage|tobacco|household|personal care|dairy|sugar|\btea\b|\bagro\b|edible/],
+  ["Consumer & Retail", /consumer durables|consumer discretionary|consumer services|retail|hotel|restaurant|leisure|jewel|apparel|e-?commerce|travel|footwear/],
+  ["Cement & Building Materials", /cement|construction materials|building products|\btiles\b|ceramic|\bglass\b/],
+  ["Realty", /realty|real estate|\breit|propert|housing dev|developers|\bestates?\b/],
+  ["Telecom & Media", /telecom|communication|media|broadcast|publish|\bfilms?\b|cable tv|television|advertis|entertainment/],
+  ["Infrastructure & Capital Goods", /capital goods|industrial|construction|engineer|machinery|aerospace|defen[cs]e|transport|logistic|shipping|\bports?\b|airline|railway|infra|electrical equipment|\bcables\b|projects|equipment/],
+];
+function catOf(sector, industry, name){
+  const si = ((sector||"") + " | " + (industry||"")).toLowerCase();
+  if (sector || industry) for (const [c, re] of CAT_RULES) if (re.test(si)) return c;
+  const n = (name||"").toLowerCase();
+  for (const [c, re] of CAT_RULES) if (re.test(n)) return c;
+  return "Others";
+}
+const rowCat = r => r._c || (r._c = catOf(r[10], r[13], r[1]));
+function catSelect(id, val, list){
+  const present = new Set(list); return `<div class="field"><label for="${id}">Category</label><select id="${id}"><option value="">All categories</option>${CATS.filter(c=>present.has(c)).map(c=>`<option ${val===c?"selected":""}>${esc(c)}</option>`).join("")}</select></div>`;
+}
 
 /* ================= CHARTS (stocks & funds) ================= */
 const SHARDS = {};
@@ -650,7 +695,8 @@ function bigNum(v, india){
 function renderActive(){
   const india = UI.am === "India", list = (ACTIVE && ACTIVE[UI.am]) || [];
   const key = {"Volume":"vol","Value traded":"value","Volume surge":"surge"}[UI.as] || "vol";
-  const rows = list.filter(r => r[key] != null).slice().sort((a,b) => b[key]-a[key]).slice(0, 50);
+  list.forEach(r => { if (!r._c) r._c = catOf(r.sector, "", r.n); });
+  const rows = list.filter(r => r[key] != null && (!UI.acat || r._c === UI.acat)).slice().sort((a,b) => b[key]-a[key]).slice(0, 50);
   const day = rows[0] ? rows[0].day : "", cur = india ? "₹" : "$";
   $("#view").innerHTML = `
     <h1>Top performers</h1>
@@ -658,16 +704,18 @@ function renderActive(){
     <p class="sub" style="margin-top:12px">${ACTIVE ? `Most traded shares in today's session (${esc(day)}), from about ${india?"500 Indian":"700 large US"} companies. Updated ${ago(ACTIVE.updated)}; Yahoo Finance volumes can lag about 15 minutes.` : "Intraday volumes appear after the next update."}</p>
     <div class="filters2">
       <span class="lbl">Market</span><span class="seg" data-seg="am">${["India","US"].map(x=>`<button aria-pressed="${UI.am===x}">${x}</button>`).join("")}</span>
+      <select id="acat" aria-label="Category" style="width:auto"><option value="">All categories</option>${CATS.filter(c=>list.some(r=>r._c===c)).map(c=>`<option ${UI.acat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>
       <span class="lbl">Rank by</span><span class="seg" data-seg="as">${["Volume","Value traded","Volume surge"].map(x=>`<button aria-pressed="${UI.as===x}">${x}</button>`).join("")}</span>
     </div>
     <p class="note" style="margin-top:8px">${UI.as==="Volume" ? "Number of shares traded today." : UI.as==="Value traded" ? "Shares traded × price: where the most money changed hands today." : "Today's volume compared with the stock's average day over the last month (2× = twice the usual)."}</p>
     <h2>${rows.length ? `Top ${rows.length} by ${UI.as.toLowerCase()}` : "No data yet"}</h2>
     <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th><th class="n">Today</th><th class="n">Volume</th><th class="n">Value traded</th><th class="n">vs usual</th></tr></thead><tbody>
-      ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r.t)}">${esc(r.n)}</button><small>${esc([r.t, r.sector, r.size].filter(Boolean).join(" · "))}</small></td>
+      ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r.t)}">${esc(r.n)}</button><small>${esc([r.t, r._c, r.size].filter(Boolean).join(" · "))}</small></td>
         <td class="n">${cur}${fmt(r.price)}</td><td class="n ${r.chg>=0?"pos":"neg"}">${r.chg==null?"–":pct(r.chg)}</td>
         <td class="n">${bigNum(r.vol, india)}</td><td class="n">${cur}${bigNum(r.value, india)}</td><td class="n">${r.surge==null?"–":r.surge.toFixed(1)+"×"}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="disc">For education only. High volume shows interest, not direction; it is not a signal to buy or sell. Intraday trading is high risk.</p>`;
+  if ($("#acat")) $("#acat").onchange = e => { UI.acat = e.target.value; renderActive(); };
 }
 
 /* ================= GLOBAL SEARCH ================= */
@@ -697,6 +745,63 @@ function searchAll(q){
   inp.addEventListener("keydown", e => { if (e.key === "Enter"){ const b = box.querySelector("button"); if (b) b.click(); } if (e.key === "Escape"){ box.hidden = true; inp.blur(); } });
   document.addEventListener("click", e => { if (!e.target.closest(".gs")) box.hidden = true; else if (e.target.closest(".gsr button")){ box.hidden = true; inp.value = ""; } });
 })();
+
+
+/* ================= IPOs ================= */
+const dshort = d => d ? new Date(d + "T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}) : "–";
+function ipoCat(x){ return x._c || (x._c = catOf(x.sector, x.industry, x.name)); }
+function renderIPO(){
+  if (!UNIV) loadUniverse();
+  const india = UI.im === "India", D = IPO ? (india ? IPO.india : IPO.us) : null;
+  const q = UI.iq.trim().toLowerCase();
+  const keep = x => (!q || (x.name + " " + x.symbol).toLowerCase().includes(q)) && (!UI.icat || ipoCat(x) === UI.icat) && (!india || !UI.iboard || x.board === UI.iboard);
+  // recently listed: official list (with issue price) + any stock that started trading in the last year (from price data)
+  let listed = D ? (india ? D.listed : D.priced).slice() : [];
+  if (UNIV && UNIV.rows.length){
+    const have = new Set(listed.map(x => x.ticker || (india ? x.symbol + ".NS" : x.symbol)));
+    UNIV.rows.filter(r => r[16] && (india ? (r[2]==="NSE"||r[2]==="BSE") : !(r[2]==="NSE"||r[2]==="BSE")) && !have.has(r[0]))
+      .forEach(r => listed.push({name:r[1], symbol:r[0].replace(/\.(NS|BO)$/,""), ticker:r[0], board: india ? "Mainboard" : r[2], listed:r[16], date:r[16], price:r[3],
+        first_close_return:r[17], sector:r[10], industry:r[13], fromPrices:true}));
+  }
+  listed.forEach(x => { x.when = x.listed || x.date || ""; x.perf = x.return != null ? x.return : x.first_close_return; });
+  listed = listed.filter(keep);
+  listed.sort(UI.isort === "Best return" ? (a,b) => (b.perf ?? -1e9) - (a.perf ?? -1e9) : UI.isort === "Worst return" ? (a,b) => (a.perf ?? 1e9) - (b.perf ?? 1e9) : (a,b) => b.when.localeCompare(a.when));
+  const open = D && india ? D.open.filter(keep) : [], upcoming = D ? D.upcoming.filter(keep) : [], filed = D && !india ? D.filed.filter(keep) : [];
+  const all = [...open, ...upcoming, ...listed, ...filed];
+  const cur = india ? "₹" : "$";
+  const card = (x, tag) => `<div class="tcard" style="margin:0"><div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><b>${esc(x.name)}</b><span class="chip ${tag==="Open now"?"up":""}">${tag}</span></div>
+    <div class="meta">${esc([x.symbol, india ? x.board : x.exchange, ipoCat(x)].filter(Boolean).join(" · "))}</div>
+    <div class="kv" style="margin:8px 0 0">${india ? `<div><b>Opens</b>${dshort(x.open)}</div><div><b>Closes</b>${dshort(x.close)}</div>` : `<div><b>Expected</b>${dshort(x.date)}</div>`}
+      <div><b>Price band</b>${esc(String(x.price_band||"–"))}</div>${x.lot ? `<div><b>Lot</b>${esc(x.lot)} sh</div>` : ""}${x.subscribed ? `<div><b>Subscribed</b>${esc(x.subscribed)}×</div>` : ""}${x.size && !india ? `<div><b>Size</b>${esc(x.size)}</div>` : ""}</div></div>`;
+  $("#view").innerHTML = `
+    <h1>IPOs</h1>
+    <p class="sub">${IPO ? `Open, upcoming and recently listed IPOs${india ? " on NSE (mainboard and SME)" : " on NYSE and NASDAQ"}. Updated ${ago(IPO.updated)}.` : "IPO data appears after the next update."}</p>
+    <div class="filters">
+      <div class="field"><label for="iq">Find an IPO</label><input type="search" id="iq" placeholder="Company or symbol" value="${esc(UI.iq)}"></div>
+      ${catSelect("icat", UI.icat, all.map(ipoCat))}
+      ${india ? `<div class="field"><label for="iboard">Board</label><select id="iboard"><option value="">Mainboard + SME</option><option ${UI.iboard==="Mainboard"?"selected":""}>Mainboard</option><option ${UI.iboard==="SME"?"selected":""}>SME</option></select></div>` : ""}
+    </div>
+    <div class="filters2"><span class="lbl">Market</span><span class="seg" data-seg="im">${["India","US"].map(x=>`<button aria-pressed="${UI.im===x}">${x}</button>`).join("")}</span></div>
+
+    ${india ? `<h2>Open now${open.length?` (${open.length})`:""}</h2>${open.length ? `<div class="catmap" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${open.map(x=>card(x,"Open now")).join("")}</div>` : `<p class="note">No IPO is open for bidding right now.</p>`}` : ""}
+
+    <h2>Upcoming${upcoming.length?` (${upcoming.length})`:""}</h2>
+    ${upcoming.length ? `<div class="catmap" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${upcoming.map(x=>card(x,"Upcoming")).join("")}</div>` : `<p class="note">No upcoming IPOs announced yet.</p>`}
+
+    <h2>Recently listed${listed.length?` (${listed.length})`:""}</h2>
+    <div class="filters2"><span class="lbl">Sort</span><span class="seg" data-seg="isort">${["Latest","Best return","Worst return"].map(x=>`<button aria-pressed="${UI.isort===x}">${x}</button>`).join("")}</span></div>
+    <div class="tablewrap" style="margin-top:10px"><table class="pt"><thead><tr><th>Company</th><th>Listed</th><th class="n">Issue price</th><th class="n">Now</th><th class="n">Return</th></tr></thead><tbody>
+      ${listed.slice(0, 150).map(x=>`<tr><td>${x.ticker ? `<button class="linkish" data-chart="${esc(x.ticker)}">${esc(x.name)}</button>` : esc(x.name)}<small>${esc([x.symbol, india ? x.board : (x.exchange||x.board), ipoCat(x)].filter(Boolean).join(" · "))}</small></td>
+        <td>${dshort(x.when)}</td><td class="n">${x.issue_price ? cur + fmt(x.issue_price) : "–"}</td><td class="n">${x.price != null ? cur + fmt(x.price) : "–"}</td>
+        <td class="n ${x.perf>=0?"pos":"neg"}">${x.perf==null?"–":pct(x.perf)}${x.fromPrices && x.perf!=null ? "<small>since 1st day</small>" : (x.perf!=null ? "<small>vs issue</small>" : "")}</td></tr>`).join("") || `<tr><td colspan="5" class="note">No listings match these filters.</td></tr>`}
+    </tbody></table></div>
+
+    ${!india ? `<h2>Filed (paperwork submitted)${filed.length?` (${filed.length})`:""}</h2>${filed.length ? `<div class="tablewrap"><table class="pt"><thead><tr><th>Company</th><th>Filed</th><th class="n">Planned size</th></tr></thead><tbody>${filed.slice(0,60).map(x=>`<tr><td>${esc(x.name)}<small>${esc([x.symbol, ipoCat(x)].filter(Boolean).join(" · "))}</small></td><td>${dshort(x.date)}</td><td class="n">${esc(x.size||"–")}</td></tr>`).join("")}</tbody></table></div>` : `<p class="note">No recent filings.</p>`}` : ""}
+    <p class="disc">For education only. IPOs are high risk: listing prices can swing sharply and many trade below their issue price. "vs issue" compares today's price with the final IPO price; "since 1st day" compares with the first day's close when the issue price isn't available. Read the offer document (RHP) and consult a SEBI-registered adviser before applying.</p>`;
+  const iq = $("#iq"); iq.oninput = () => { UI.iq = iq.value; const pos = iq.selectionStart; renderIPO(); const n = $("#iq"); n.focus(); n.setSelectionRange(pos,pos); };
+  $("#icat").onchange = e => { UI.icat = e.target.value; renderIPO(); };
+  if ($("#iboard")) $("#iboard").onchange = e => { UI.iboard = e.target.value; renderIPO(); };
+}
 
 /* ================= INVESTMENT PLANNER ================= */
 function simulate(o){

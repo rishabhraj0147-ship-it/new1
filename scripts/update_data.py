@@ -874,6 +874,146 @@ def build_active(intraday=_intraday) -> dict | None:
         return None
     return {"updated": datetime.now(timezone.utc).isoformat(), **out}
 
+
+# =============================================================================
+# IPOs – India (NSE: open, upcoming, recently listed) and US (Nasdaq IPO calendar)
+# =============================================================================
+IPO_REFRESH_HOURS = 3
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+
+def _num(x):
+    """'Rs.105 to Rs.112' -> 112.0 ; '$14.00-$16.00' -> 16.0 ; '1,234' -> 1234.0"""
+    vals = re.findall(r"\d[\d,]*\.?\d*", str(x or ""))
+    try:
+        return float(vals[-1].replace(",", "")) if vals else None
+    except ValueError:
+        return None
+
+
+def _date(x):
+    for fmt in ("%d-%b-%Y", "%d-%B-%Y", "%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(str(x).strip().title() if "%b" in fmt or "%B" in fmt else str(x).strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ""
+
+
+def _nse_session():
+    sess = requests.Session()
+    sess.headers.update({"User-Agent": BROWSER_UA, "Accept": "application/json, text/plain, */*",
+                         "Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.nseindia.com/market-data/all-upcoming-issues-ipo"})
+    try:
+        sess.get("https://www.nseindia.com/", timeout=20)
+    except Exception:
+        pass
+    return sess
+
+
+def india_ipos(uni_by_t: dict) -> dict:
+    out = {"open": [], "upcoming": [], "listed": []}
+    sess = _nse_session()
+    def get(path):
+        try:
+            r = sess.get("https://www.nseindia.com/api/" + path, timeout=25)
+            r.raise_for_status()
+            j = r.json()
+            return j if isinstance(j, list) else (j.get("data") or [])
+        except Exception as exc:
+            print(f"  NSE IPO {path} failed: {exc}", file=sys.stderr)
+            return []
+    def common(r):
+        name = r.get("companyName") or r.get("company") or r.get("symbol") or ""
+        series = (r.get("series") or r.get("securityType") or "").upper()
+        band = r.get("priceBand") or r.get("priceRange") or r.get("issuePrice") or ""
+        return {"name": name.strip(), "symbol": (r.get("symbol") or "").strip(), "board": "SME" if series in ("SME", "SM", "ST") else "Mainboard",
+                "open": _date(r.get("issueStartDate") or r.get("ipoStartDate")), "close": _date(r.get("issueEndDate") or r.get("ipoEndDate")),
+                "price_band": str(band).strip(), "size": r.get("issueSize") or "", "lot": r.get("lotSize") or ""}
+    for r in get("ipo-current-issue"):
+        x = common(r)
+        x["subscribed"] = r.get("noOfTime") or r.get("subscription") or ""
+        out["open"].append(x)
+    for r in get("all-upcoming-issues?category=ipo"):
+        out["upcoming"].append(common(r))
+    cutoff = (datetime.now() - timedelta(days=400)).strftime("%Y-%m-%d")
+    for r in get("public-past-issues"):
+        st = (r.get("securityType") or "").upper()
+        if st not in ("EQ", "BE", "SME", "SM", "ST"):
+            continue
+        x = common(r)
+        x["listed"] = _date(r.get("listingDate"))
+        if not x["listed"] or x["listed"] < cutoff:
+            continue
+        x["issue_price"] = _num(r.get("issuePrice")) or _num(r.get("priceRange"))
+        u = uni_by_t.get(x["symbol"] + ".NS")
+        if u:
+            x["ticker"], x["price"], x["sector"], x["industry"] = u[0], u[3], u[10], (u[13] if len(u) > 13 else "")
+            if x["issue_price"]:
+                x["return"] = round((u[3] / x["issue_price"] - 1) * 100, 2)
+        out["listed"].append(x)
+    out["listed"].sort(key=lambda x: x["listed"], reverse=True)
+    return out
+
+
+def us_ipos(uni_by_t: dict) -> dict:
+    out = {"upcoming": [], "priced": [], "filed": []}
+    now = datetime.now()
+    months = [(now.year + (now.month - 1 + d) // 12, (now.month - 1 + d) % 12 + 1) for d in (-3, -2, -1, 0, 1)]
+    seen = set()
+    for y, m in months:
+        try:
+            j = requests.get(f"https://api.nasdaq.com/api/ipo/calendar?date={y}-{m:02d}", timeout=25,
+                             headers={"User-Agent": BROWSER_UA, "Accept": "application/json, text/plain, */*",
+                                      "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/"}).json()
+        except Exception as exc:
+            print(f"  Nasdaq IPO {y}-{m} failed: {exc}", file=sys.stderr)
+            continue
+        d = j.get("data") or {}
+        def rows(node):
+            if isinstance(node, dict):
+                if isinstance(node.get("rows"), list):
+                    return node["rows"]
+                for v in node.values():
+                    r = rows(v)
+                    if r:
+                        return r
+            return []
+        for kind in ("upcoming", "priced", "filed"):
+            for r in rows(d.get(kind)) or []:
+                key = (kind, r.get("dealID") or r.get("companyName"))
+                if key in seen:
+                    continue
+                seen.add(key)
+                t = (r.get("proposedTickerSymbol") or "").strip()
+                x = {"name": (r.get("companyName") or "").strip(), "symbol": t, "exchange": r.get("proposedExchange") or "",
+                     "price_band": r.get("proposedSharePrice") or "", "shares": r.get("sharesOffered") or "",
+                     "size": r.get("dollarValueOfSharesOffered") or "",
+                     "date": _date(r.get("pricedDate") or r.get("expectedPriceDate") or r.get("filedDate") or "")}
+                if kind == "priced":
+                    x["issue_price"] = _num(r.get("proposedSharePrice"))
+                    u = uni_by_t.get(t)
+                    if u:
+                        x["ticker"], x["price"], x["sector"], x["industry"] = u[0], u[3], u[10], (u[13] if len(u) > 13 else "")
+                        if x["issue_price"]:
+                            x["return"] = round((u[3] / x["issue_price"] - 1) * 100, 2)
+                out[kind].append(x)
+    for k in out:
+        out[k].sort(key=lambda x: x["date"], reverse=(k != "upcoming"))
+    return out
+
+
+def build_ipos() -> dict | None:
+    old = _load(os.path.join(OUT_DIR, "ipo.json")) or {}
+    if old.get("updated") and datetime.now(timezone.utc) - datetime.fromisoformat(old["updated"]) < timedelta(hours=IPO_REFRESH_HOURS):
+        return None
+    uni = _load(os.path.join(OUT_DIR, "universe.json")) or {}
+    by_t = {r[0]: r for r in uni.get("rows", [])}
+    india, us = india_ipos(by_t), us_ipos(by_t)
+    if not any(india.values()) and not any(us.values()):
+        return None
+    return {"updated": datetime.now(timezone.utc).isoformat(), "india": india, "us": us}
+
 # =============================================================================
 # OPTIONAL: CLAUDE WRITES THE CRUX + IMPACT (only if the ANTHROPIC_API_KEY secret is set)
 # =============================================================================
@@ -1003,6 +1143,15 @@ def main():
     if act:
         _write(os.path.join(OUT_DIR, "active.json"), act)
         print(f"  India {len(act.get('India', []))}, US {len(act.get('US', []))}")
+    print("IPOs…")
+    try:
+        ipo = build_ipos()
+    except Exception as exc:
+        ipo = None
+        print(f"  IPOs failed: {exc}", file=sys.stderr)
+    if ipo:
+        _write(os.path.join(OUT_DIR, "ipo.json"), ipo)
+        print(f"  India open {len(ipo['india']['open'])}, upcoming {len(ipo['india']['upcoming'])}, listed {len(ipo['india']['listed'])}; US upcoming {len(ipo['us']['upcoming'])}, priced {len(ipo['us']['priced'])}")
     print("Mutual funds…")
     funds = build_funds()
     if funds:

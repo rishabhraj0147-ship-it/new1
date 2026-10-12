@@ -180,6 +180,17 @@ def _download(tickers):
     return c
 
 
+def listing(series, full_index):
+    """For stocks that started trading inside the 1-year window: [first trading day, % change since its close]."""
+    s = series.dropna()
+    if len(s) < 2 or len(full_index) < 2:
+        return ["", None]
+    first = s.index[0]
+    if (first - full_index[0]).days < 10:          # was already trading a year ago
+        return ["", None]
+    return [first.strftime("%Y-%m-%d"), round((float(s.iloc[-1]) / float(s.iloc[0]) - 1) * 100, 2)]
+
+
 def perf(s):
     s = s.dropna()
     if len(s) < 3:
@@ -233,7 +244,7 @@ def build(listings: list[dict], download=_download, pause=1.0, meta=None, shards
                         m = meta.get(x["t"], {})
                         rows.append([x["t"], x["n"][:70], x["x"], p["p"], p["d1"], p["w1"], p["m1"], p["m6"], p["y1"], p["as_of"],
                                      m.get("sector") or "", m.get("size") or ("Below top 750" if x["x"] == "NSE" else ""), m.get("country") or ("India" if x["x"] in ("NSE", "BSE") else ""),
-                                     m.get("industry") or "", lv, av])
+                                     m.get("industry") or "", lv, av, *listing(df[x["t"]], df.index)])
                         if shards is not None:
                             shards.setdefault(shard_of(x["t"]), {})[x["t"]] = _series(df[x["t"]])
                         ok += 1
@@ -266,7 +277,7 @@ def main():
     for r in rows:
         counts[r[2]] = counts.get(r[2], 0) + 1
     data = {"updated": datetime.now(timezone.utc).isoformat(), "count": len(rows), "by_exchange": counts,
-            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of", "sector", "size", "country", "industry", "volume", "avg_volume_20d"],
+            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of", "sector", "size", "country", "industry", "volume", "avg_volume_20d", "first_trade", "since_first_close"],
             "shards": N_SHARDS, "rows": rows}
     tmp = os.path.join(OUT_DIR, "universe.json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
