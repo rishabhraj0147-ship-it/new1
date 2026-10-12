@@ -372,7 +372,12 @@ function spark(vals, w=200, h=46){
 /* ================= data loading ================= */
 // Data is published with the site; if a page build ever goes out without it, read the same files
 // straight from the repository's data branches instead, so the site never shows empty.
-const REPO = "rishabhraj0147-ship-it/new1";
+// Works out the publishing repository from the address: <owner>.github.io/<repo>/ or <owner>.github.io (repo = <owner>.github.io)
+const REPO = (() => {
+  const h = location.hostname, seg = location.pathname.split("/").filter(Boolean)[0];
+  if (h.endsWith(".github.io")) { const owner = h.slice(0, -10); return seg && seg !== "index.html" ? `${owner}/${seg}` : `${owner}/${h}`; }
+  return "worldpulse-news/worldpulse-news.github.io";
+})();
 async function getJSON(path){
   try{
     const r = await fetch(path + "?t=" + Date.now(), {cache:"no-store"});
