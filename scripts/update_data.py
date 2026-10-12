@@ -595,18 +595,34 @@ COMMODITIES = {
     "BZ=F": "Brent crude", "CL=F": "WTI crude", "NG=F": "Natural gas", "ZW=F": "Wheat", "ZC=F": "Corn",
     "ZS=F": "Soybeans", "KC=F": "Coffee", "SB=F": "Sugar", "CC=F": "Cocoa", "CT=F": "Cotton",
 }
-# Popular Indian mutual funds (Direct, Growth). Searched by name on mfapi.in once a day.
+# Popular Indian mutual funds (Direct plan, Growth option), found by name on mfapi.in once a day.
+# (label, category, search queries to try, words the scheme name must contain)
 MUTUAL_FUNDS = [
-    ("Parag Parikh Flexi Cap", "Flexi cap"), ("HDFC Flexi Cap", "Flexi cap"), ("Kotak Flexicap", "Flexi cap"),
-    ("ICICI Prudential Large Cap", "Large cap"), ("Nippon India Large Cap", "Large cap"), ("SBI Bluechip", "Large cap"),
-    ("Motilal Oswal Midcap", "Mid cap"), ("HDFC Mid Cap", "Mid cap"), ("Kotak Midcap", "Mid cap"),
-    ("Nippon India Small Cap", "Small cap"), ("SBI Small Cap", "Small cap"), ("Quant Small Cap", "Small cap"),
-    ("Axis Small Cap", "Small cap"), ("UTI Nifty 50 Index", "Index"), ("Navi Nifty 50 Index", "Index"),
-    ("Mirae Asset ELSS Tax Saver", "ELSS (tax saver)"), ("Quant ELSS Tax Saver", "ELSS (tax saver)"),
-    ("ICICI Prudential Equity & Debt", "Hybrid"), ("HDFC Balanced Advantage", "Hybrid"),
-    ("ICICI Prudential Technology", "Sectoral"), ("SBI Healthcare Opportunities", "Sectoral"),
-    ("Motilal Oswal Nasdaq 100 Fund of Fund", "International"), ("SBI Gold", "Gold"),
-    ("HDFC Corporate Bond", "Debt"), ("ICICI Prudential Liquid", "Debt"),
+    ("Parag Parikh Flexi Cap", "Flexi cap", ["Parag Parikh Flexi Cap"], ["parag", "flexi"]),
+    ("HDFC Flexi Cap", "Flexi cap", ["HDFC Flexi Cap"], ["hdfc", "flexi"]),
+    ("Kotak Flexicap", "Flexi cap", ["Kotak Flexicap", "Kotak Flexi Cap", "Kotak"], ["kotak", "flexi"]),
+    ("ICICI Prudential Large Cap", "Large cap", ["ICICI Prudential Large Cap", "ICICI Prudential Bluechip"], ["icici", "large cap"]),
+    ("Nippon India Large Cap", "Large cap", ["Nippon India Large Cap"], ["nippon", "large cap"]),
+    ("SBI Large Cap", "Large cap", ["SBI Large Cap", "SBI Bluechip", "SBI Blue Chip"], ["sbi", "large cap|bluechip|blue chip"]),
+    ("Motilal Oswal Midcap", "Mid cap", ["Motilal Oswal Midcap", "Motilal Oswal Mid Cap"], ["motilal", "midcap|mid cap"]),
+    ("HDFC Mid Cap", "Mid cap", ["HDFC Mid Cap", "HDFC Mid-Cap"], ["hdfc", "mid cap|mid-cap|midcap"]),
+    ("Kotak Midcap", "Mid cap", ["Kotak Midcap", "Kotak Emerging Equity"], ["kotak", "midcap|mid cap|emerging equity"]),
+    ("Nippon India Small Cap", "Small cap", ["Nippon India Small Cap"], ["nippon", "small cap"]),
+    ("SBI Small Cap", "Small cap", ["SBI Small Cap"], ["sbi", "small cap"]),
+    ("Quant Small Cap", "Small cap", ["Quant Small Cap"], ["quant", "small cap"]),
+    ("Axis Small Cap", "Small cap", ["Axis Small Cap"], ["axis", "small cap"]),
+    ("UTI Nifty 50 Index", "Index", ["UTI Nifty 50 Index"], ["uti", "nifty 50 index"]),
+    ("Navi Nifty 50 Index", "Index", ["Navi Nifty 50 Index"], ["navi", "nifty 50 index"]),
+    ("Mirae Asset ELSS Tax Saver", "ELSS (tax saver)", ["Mirae Asset ELSS Tax Saver", "Mirae Asset Tax Saver"], ["mirae", "elss|tax saver"]),
+    ("Quant ELSS Tax Saver", "ELSS (tax saver)", ["Quant ELSS Tax Saver", "Quant Tax Plan"], ["quant", "elss|tax"]),
+    ("ICICI Prudential Equity & Debt", "Hybrid", ["ICICI Prudential Equity & Debt", "ICICI Prudential Equity and Debt", "Equity & Debt"], ["icici", "equity", "debt"]),
+    ("HDFC Balanced Advantage", "Hybrid", ["HDFC Balanced Advantage"], ["hdfc", "balanced advantage"]),
+    ("ICICI Prudential Technology", "Sectoral", ["ICICI Prudential Technology"], ["icici", "technology"]),
+    ("SBI Healthcare Opportunities", "Sectoral", ["SBI Healthcare Opportunities"], ["sbi", "healthcare"]),
+    ("Motilal Oswal Nasdaq 100 FoF", "International", ["Motilal Oswal Nasdaq 100", "Nasdaq 100 Fund of Fund", "Nasdaq"], ["motilal", "nasdaq"]),
+    ("SBI Gold", "Gold", ["SBI Gold"], ["sbi", "gold"]),
+    ("HDFC Corporate Bond", "Debt", ["HDFC Corporate Bond"], ["hdfc", "corporate bond"]),
+    ("ICICI Prudential Liquid", "Debt", ["ICICI Prudential Liquid", "Liquid Fund"], ["icici", "liquid"]),
 ]
 MF_REFRESH_HOURS = 12
 
@@ -693,52 +709,60 @@ def _mf_returns(rows: list[dict]) -> dict | None:
     return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in res.items()}
 
 
+def _pick_scheme(hits: list[dict], label: str, must: list[str]) -> dict | None:
+    """Choose the Direct-plan Growth scheme whose name has all required words (shortest name wins)."""
+    def norm(x):
+        return re.sub(r"[^a-z0-9& ]+", " ", x.lower()).replace("  ", " ")
+    allow_index = any(w in label.lower() for w in ("index", "nasdaq", "fof", "fund of fund"))
+    ok = []
+    for h in hits:
+        n = norm(h.get("schemeName", ""))
+        if "direct" not in n or "growth" not in n or any(w in n for w in ("idcw", "dividend", "bonus", "segregated")):
+            continue
+        if not all(any(alt in n for alt in w.split("|")) for w in must):
+            continue
+        if not allow_index and any(w in n for w in (" index", " etf", "fund of fund", " fof")):
+            continue
+        ok.append(h)
+    return min(ok, key=lambda h: len(h["schemeName"])) if ok else None
+
+
+FUNDS_VERSION = 2
+
+
 def build_funds(get=_mf_get) -> dict | None:
     old = _load(os.path.join(OUT_DIR, "funds.json")) or {}
-    if old.get("updated"):
+    same = old.get("v") == FUNDS_VERSION
+    if same and old.get("updated") and old.get("funds"):
         age = datetime.now(timezone.utc) - datetime.fromisoformat(old["updated"])
-        if age < timedelta(hours=MF_REFRESH_HOURS) and old.get("funds"):
+        if age < timedelta(hours=MF_REFRESH_HOURS):
             return None                      # NAVs change once a day – keep the cached file
-    codes = {f["query"]: f["code"] for f in old.get("funds", [])}
+    codes = {f["query"]: f["code"] for f in old.get("funds", [])} if same else {}
     funds = []
-    for query, category in MUTUAL_FUNDS:
+    for label, category, queries, must in MUTUAL_FUNDS:
         try:
-            code = codes.get(query)
+            code = codes.get(label)
             if not code:
-                hits = get("https://api.mfapi.in/mf/search?q=" + requests.utils.quote(query))
-                pick = [h for h in hits if "direct" in h["schemeName"].lower() and "growth" in h["schemeName"].lower()
-                        and "idcw" not in h["schemeName"].lower() and "bonus" not in h["schemeName"].lower()]
-                if not pick:
-                    continue
-                code = pick[0]["schemeCode"]
+                for q in queries:
+                    pick = _pick_scheme(get("https://api.mfapi.in/mf/search?q=" + requests.utils.quote(q)), label, must)
+                    if pick:
+                        code = pick["schemeCode"]
+                        break
+            if not code:
+                print(f"  fund not found: {label}", file=sys.stderr)
+                continue
             data = get(f"https://api.mfapi.in/mf/{code}")
             ret = _mf_returns(data.get("data", []))
             if not ret:
                 continue
             meta = data.get("meta", {})
-            funds.append({"query": query, "code": code, "name": meta.get("scheme_name", query), "house": meta.get("fund_house", ""),
+            funds.append({"query": label, "code": code, "name": meta.get("scheme_name", label), "house": meta.get("fund_house", ""),
                           "category": category, **ret})
         except Exception as exc:
-            print(f"  fund failed {query}: {exc}", file=sys.stderr)
+            print(f"  fund failed {label}: {exc}", file=sys.stderr)
     if not funds:
         return None
-    return {"updated": datetime.now(timezone.utc).isoformat(), "source": "AMFI NAVs via mfapi.in", "funds": funds}
-
-# =============================================================================
-# OPTIONAL: CLAUDE WRITES THE CRUX + IMPACT (only if the ANTHROPIC_API_KEY secret is set)
-# =============================================================================
-AI_MODEL = os.environ.get("WORLDPULSE_MODEL", "claude-haiku-4-5-20251001")
-AI_MAX_PER_RUN = 200       # new stories analysed per run (keeps cost low)
-AI_PROMPT = """You are a markets analyst writing for busy retail investors in India and worldwide.
-For EACH news item below, return:
-- "crux": the core of the story in ONE plain sentence (max 30 words), facts only.
-- "positive": up to 3 short phrases naming who could GAIN in markets (sectors, assets, countries, or named companies) and why, e.g. "Oil producers – higher realisations".
-- "negative": up to 3 short phrases naming who could LOSE and why.
-If an item has no real market relevance, use empty lists.
-Return ONLY a JSON array: [{"id": "...", "crux": "...", "positive": ["..."], "negative": ["..."]}]
-
-ITEMS:
-"""
+    return {"v": FUNDS_VERSION, "updated": datetime.now(timezone.utc).isoformat(), "source": "AMFI NAVs via mfapi.in", "funds": funds}
 
 
 def ai_enrich(articles: list[dict], previous: dict) -> int:
