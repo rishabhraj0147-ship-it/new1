@@ -723,11 +723,13 @@ def _pick_scheme(hits: list[dict], label: str, must: list[str]) -> dict | None:
             continue
         if not allow_index and any(w in n for w in (" index", " etf", "fund of fund", " fof")):
             continue
+        if "large" not in label.lower() and ("large and mid" in n or "large & mid" in n):
+            continue
         ok.append(h)
     return min(ok, key=lambda h: len(h["schemeName"])) if ok else None
 
 
-FUNDS_VERSION = 2
+FUNDS_VERSION = 3
 
 
 def build_funds(get=_mf_get) -> dict | None:
