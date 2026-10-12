@@ -143,7 +143,6 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
       <a href="#news" data-v="news">News</a>
       <a href="#markets" data-v="markets">Markets</a>
       <a href="#tracker" data-v="tracker">My tracker</a>
-      <a href="#sources" data-v="sources">Sources &amp; settings</a>
     </nav>
     <div class="live"><span class="dot" id="dot"></span><span id="liveText">Loading…</span></div>
   </div>
@@ -487,7 +486,7 @@ function renderAI(a){
       <p class="note">Horizon: ${esc(r.time_horizon||"–")} · Confidence: ${esc(r.confidence||"–")}${r.what_to_watch_next?` · Next: ${esc(r.what_to_watch_next)}`:""}</p>`;
     return;
   }
-  if (!ME.key){ body.innerHTML = `<p class="note" style="margin:0">Add your Anthropic API key on the <a href="#sources" data-close>Sources &amp; settings</a> page to get a reasoned impact note for any story.</p>`; return; }
+  if (!ME.key){ $("#aiBox").hidden = true; return; }
   body.innerHTML = `<button class="btn primary" id="aiGo">Analyse impact with Claude</button>`;
   $("#aiGo").onclick = async () => {
     body.innerHTML = `<p class="note">Asking Claude…</p>`;
@@ -505,7 +504,7 @@ SUMMARY: ${a.summary||"(none)"}`;
       if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
       const text = (j.content||[]).map(c => c.text||"").join(""), m = text.match(/\{[\s\S]*\}/);
       ME.ai[a.id] = m ? JSON.parse(m[0]) : {headline_view: text}; save(); renderAI(a);
-    }catch(err){ body.innerHTML = `<p class="neg" style="margin:0 0 8px">Couldn't get an analysis: ${esc(err.message)}. Check your key on the Sources &amp; settings page.</p><button class="btn" id="aiGo2">Try again</button>`; $("#aiGo2").onclick = () => renderAI(a); }
+    }catch(err){ body.innerHTML = `<p class="neg" style="margin:0 0 8px">Couldn't get an analysis: ${esc(err.message)}. Check your API key.</p><button class="btn" id="aiGo2">Try again</button>`; $("#aiGo2").onclick = () => renderAI(a); }
   };
 }
 
