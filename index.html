@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WorldPulse</title>
+<meta name="description" content="World news from 30 sources, tagged with its likely impact on share markets. Updates every 15 minutes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: header + market ribbon, then one view at a time (News / Markets / Tracker / Sources); a story opens in a side reader */
+:root{
+  --bg:#F5F6F3; --surface:#FFFFFF; --sunk:#ECEEEA; --ink:#15201C; --muted:#5E6B66; --line:#DCE1DD;
+  --accent:#1D5BD8; --accent-soft:#E6EDFC; --up:#0A7A4F; --up-soft:#E3F3EB; --down:#C0362C; --down-soft:#FBE7E5;
+  --watch:#9A5B00; --watch-soft:#FBF0DC; --hi:#C0362C; --med:#C77400;
+  --f-head:"Newsreader", Georgia, "Times New Roman", serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0F1412; --surface:#161D1A; --sunk:#1D2622; --ink:#E6ECE9; --muted:#97A39E; --line:#28322E;
+  --accent:#7EA6FF; --accent-soft:#1B2740; --up:#46C08A; --up-soft:#15291F; --down:#F07A6E; --down-soft:#341A17;
+  --watch:#E7B25A; --watch-soft:#33270F; --hi:#F07A6E; --med:#E7A54A; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:20px}
+
+/* header */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.hrow{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-block:12px}
+.logo{font-family:var(--f-head);font-weight:650;font-size:24px;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+.logo span{color:var(--accent)}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{text-decoration:none;color:var(--muted);padding:6px 12px;border-radius:8px;font-weight:500}
+nav a[aria-current="page"]{background:var(--ink);color:var(--bg)}
+.live{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--up);box-shadow:0 0 0 0 var(--up);animation:pulse 2s infinite}
+.dot.stale{background:var(--med);animation:none}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--up) 60%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.ribbon{display:flex;gap:22px;overflow-x:auto;padding-block:8px;border-top:1px solid var(--line);font-size:13px;scrollbar-width:none}
+.ribbon::-webkit-scrollbar{display:none}
+.rq{white-space:nowrap;display:flex;gap:6px;align-items:baseline}
+.rq b{font-weight:600}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pos{color:var(--up)} .neg{color:var(--down)}
+
+main{padding-block:22px 80px}
+h1{font-family:var(--f-head);font-weight:650;font-size:clamp(28px,4vw,38px);letter-spacing:-.015em;margin:0 0 4px;text-wrap:balance}
+h2{font-family:var(--f-head);font-weight:650;font-size:22px;margin:30px 0 12px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 18px}
+
+/* filters */
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px}
+.filters2{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;margin-top:10px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.lbl{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+input[type=search],input[type=text],input[type=password],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:6px 12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.toggle{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+@media (max-width:760px){.filters{grid-template-columns:1fr 1fr}.filters .field:first-child{grid-column:1/-1}}
+
+/* story cards */
+.top{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.topcard{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--hi);border-radius:10px;padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;text-align:left}
+.topcard .t{font-family:var(--f-head);font-size:17px;font-weight:650;line-height:1.25}
+.list{display:flex;flex-direction:column}
+.story{display:grid;grid-template-columns:1fr auto;gap:6px 16px;padding:16px 0;border-bottom:1px solid var(--line)}
+.story .t{font-family:var(--f-head);font-size:19px;font-weight:650;line-height:1.28;cursor:pointer;background:none;border:0;padding:0;text-align:left;color:var(--ink)}
+.story .t:hover{text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+.story.read .t{color:var(--muted)}
+.meta{font-size:13px;color:var(--muted)}
+.sum{color:var(--muted);font-size:14px;margin:2px 0 0;max-width:80ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{font-size:12px;border-radius:999px;padding:2px 9px;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
+.chip.up{color:var(--up);background:var(--up-soft);border-color:transparent}
+.chip.down{color:var(--down);background:var(--down-soft);border-color:transparent}
+.chip.watch{color:var(--watch);background:var(--watch-soft);border-color:transparent}
+.lvl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px}
+.lvl.High{background:var(--hi);color:#fff} .lvl.Medium{background:var(--med);color:#fff} .lvl.Low{background:var(--sunk);color:var(--muted)}
+.acts{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+@media (max-width:640px){.story{grid-template-columns:1fr}.acts{flex-direction:row}}
+.empty{padding:40px 0;color:var(--muted);text-align:center}
+.more{margin:18px auto 0;display:block}
+
+/* markets */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .n{font-size:13px;color:var(--muted);font-weight:500}
+.tile .p{font-size:22px}
+.tile svg{width:100%;height:46px;margin-top:6px}
+
+/* reader */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:30}
+.reader{position:fixed;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--surface);z-index:31;overflow-y:auto;box-shadow:-10px 0 40px rgba(0,0,0,.15);padding:20px 24px calc(40px + env(safe-area-inset-bottom,0px))}
+.reader h1{font-size:clamp(24px,3.4vw,32px)}
+.rtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.rbtns{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.box{background:var(--sunk);border-radius:12px;padding:14px 16px;margin-top:14px}
+.box h3{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ai li{margin-bottom:4px}
+.chart{width:100%;height:190px}
+.rx{display:flex;gap:24px;margin:6px 0}
+.rx div{display:flex;flex-direction:column}
+.rx .num{font-size:20px}
+.note{font-size:12.5px;color:var(--muted)}
+
+/* tracker */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat .v{font-family:var(--f-mono);font-size:26px}
+.stat .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:640px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+.tcard textarea{min-height:60px;margin-top:8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+details summary{cursor:pointer;font-weight:500}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tablewrap{overflow-x:auto}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;z-index:40;box-shadow:0 6px 24px rgba(0,0,0,.2);cursor:pointer}
+.disc{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);margin-top:40px;padding-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap hrow">
+    <a class="logo" href="#news">World<span>Pulse</span></a>
+    <nav aria-label="Sections">
+      <a href="#news" data-v="news">News</a>
+      <a href="#markets" data-v="markets">Markets</a>
+      <a href="#tracker" data-v="tracker">My tracker</a>
+      <a href="#sources" data-v="sources">Sources &amp; settings</a>
+    </nav>
+    <div class="live"><span class="dot" id="dot"></span><span id="liveText">Loading…</span></div>
+  </div>
+  <div class="wrap ribbon" id="ribbon" aria-label="Market snapshot"></div>
+</header>
+
+<main class="wrap" id="view"></main>
+<div id="readerHost"></div>
+<div id="toastHost"></div>
+
+<script>
+"use strict";
+/* ================= state ================= */
+const POLL_MS = 60000;                      // check for new data every minute
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+let NEWS = null, PRICES = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
+const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following"};
+
+const LS = "worldpulse:v1";
+let ME = load();
+function load(){ try{ return Object.assign({read:{},tracked:{},topics:{},ai:{},key:"",model:DEFAULT_MODEL}, JSON.parse(localStorage.getItem(LS)||"{}")); }catch(e){ return {read:{},tracked:{},topics:{},ai:{},key:"",model:DEFAULT_MODEL}; } }
+function save(){ try{ localStorage.setItem(LS, JSON.stringify(ME)); }catch(e){} }
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u||"") ? u : "#";
+function ago(iso){
+  const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return "just now"; if (m < 60) return m + " min ago"; if (m < 1440) return Math.floor(m/60) + " h ago";
+  return new Date(iso).toLocaleDateString(undefined,{day:"numeric",month:"short"});
+}
+const when = iso => new Date(iso).toLocaleString(undefined,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});
+const pct = v => (v>=0?"+":"") + v.toFixed(2) + "%";
+const fmt = v => v >= 1000 ? v.toLocaleString(undefined,{maximumFractionDigits:0}) : v.toLocaleString(undefined,{maximumFractionDigits:2});
+function effChip(s){ const c = s.effect>0?"up":s.effect<0?"down":"watch", a = s.effect>0?"▲":s.effect<0?"▼":"◆"; return `<span class="chip ${c}">${a} ${esc(s.name)}</span>`; }
+function toast(msg, onClick){
+  const h = $("#toastHost"); h.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  const t = h.firstChild; t.onclick = () => { h.innerHTML=""; onClick && onClick(); };
+  setTimeout(() => { if (h.firstChild === t) h.innerHTML = ""; }, 7000);
+}
+function words(t){ const STOP = new Set("a an the of to in on for and or with at by from as is are be was were has have had will would can could after before over into about amid says say said new more than its it this that what why how who live latest update".split(" "));
+  return new Set((t.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(w => w.length>2 && !STOP.has(w))); }
+function related(a, pool, n){ const k = words(a.title); return pool.filter(x => x.id!==a.id && [...words(x.title)].filter(w=>k.has(w)).length >= 2).slice(0,n); }
+function spark(vals, w=200, h=46){
+  if (!vals || vals.length < 2) return "";
+  const mn = Math.min(...vals), mx = Math.max(...vals), r = (mx-mn)||1;
+  const pts = vals.map((v,i)=>[i/(vals.length-1)*w, h-4-(v-mn)/r*(h-8)]);
+  const up = vals[vals.length-1] >= vals[0];
+  const line = pts.map(p=>p.map(n=>n.toFixed(1)).join(",")).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,${h} ${line} ${w},${h}" fill="var(${up?"--up-soft":"--down-soft"})"/><polyline points="${line}" fill="none" stroke="var(${up?"--up":"--down"})" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+/* ================= data loading ================= */
+async function getJSON(path){ const r = await fetch(path + "?t=" + Date.now(), {cache:"no-store"}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function refresh(first){
+  nextCheck = Date.now() + POLL_MS;
+  try{
+    const [n, p] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null)]);
+    const isNew = !NEWS || n.updated !== NEWS.updated;
+    const fresh = NEWS ? n.articles.filter(a => !BYID[a.id]).length : 0;
+    NEWS = n; if (p) PRICES = p; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
+    if (isNew || first){ render(); if (!first && fresh) toast(`${fresh} new stor${fresh===1?"y":"ies"} – tap to see the latest`, () => { location.hash = "#news"; UI.sort="Latest"; render(); window.scrollTo({top:0}); }); }
+    else renderRibbon();
+  }catch(e){
+    if (first) $("#view").innerHTML = `<h1>Waiting for the first update</h1><p class="sub">No data yet. On GitHub, open the <b>Actions</b> tab, choose <b>Update news and publish site</b> and click <b>Run workflow</b>. The site fills in a couple of minutes later.</p>`;
+  }
+  liveText();
+}
+function liveText(){
+  if (!NEWS){ $("#liveText").textContent = "No data yet"; $("#dot").classList.add("stale"); return; }
+  const mins = (Date.now() - new Date(NEWS.updated))/60000;
+  $("#dot").classList.toggle("stale", mins > 45);
+  const s = Math.max(0, Math.round((nextCheck - Date.now())/1000));
+  $("#liveText").textContent = `Updated ${ago(NEWS.updated)} · checking again in ${s}s`;
+}
+setInterval(() => { if (Date.now() >= nextCheck) refresh(false); else liveText(); }, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() > nextCheck - POLL_MS + 15000) refresh(false); });
+
+/* ================= ribbon ================= */
+const RIBBON = ["Nifty 50","Sensex","S&P 500","Nasdaq","FTSE 100","DAX","Nikkei 225","Hang Seng","Brent crude","Gold","USD/INR","Bitcoin"];
+function quote(name){ return PRICES && PRICES.quotes.find(q => q.name === name); }
+function renderRibbon(){
+  if (!PRICES){ $("#ribbon").innerHTML = `<span class="note">Prices appear after the first update.</span>`; return; }
+  $("#ribbon").innerHTML = RIBBON.map(quote).filter(Boolean).map(q =>
+    `<span class="rq"><b>${esc(q.name)}</b><span class="num">${fmt(q.last)}</span><span class="num ${q.change_pct>=0?"pos":"neg"}">${pct(q.change_pct)}</span></span>`).join("");
+}
+
+/* ================= routing ================= */
+function view(){ const h = location.hash.replace("#",""); return ["news","markets","tracker","sources"].includes(h) ? h : (h.startsWith("story-") ? (UI.lastView||"news") : "news"); }
+window.addEventListener("hashchange", () => { const h = location.hash; if (h.startsWith("#story-")) openStory(h.slice(7)); else { closeReader(false); render(); } });
+function render(){
+  if (!NEWS) return;
+  const v = view(); UI.lastView = v;
+  document.querySelectorAll("nav a").forEach(a => { if (a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  renderRibbon();
+  ({news:renderNews, markets:renderMarkets, tracker:renderTracker, sources:renderSources})[v]();
+  if (location.hash.startsWith("#story-") && !$("#readerHost").innerHTML) openStory(location.hash.slice(7));
+}
+
+/* ================= NEWS ================= */
+function filtered(){
+  const cutoff = Date.now() - UI.hours*3600e3, q = UI.q.trim().toLowerCase();
+  let rows = NEWS.articles.filter(a => new Date(a.published) >= cutoff);
+  if (q) rows = rows.filter(a => (a.title+" "+(a.summary||"")+" "+a.publisher).toLowerCase().includes(q));
+  if (UI.regions.size) rows = rows.filter(a => a.impact.regions.concat([a.region]).some(r => UI.regions.has(r)));
+  if (UI.cat) rows = rows.filter(a => a.category === UI.cat);
+  if (UI.level === "Medium+") rows = rows.filter(a => a.impact.level !== "Low");
+  if (UI.level === "High") rows = rows.filter(a => a.impact.level === "High");
+  if (UI.hideRead) rows = rows.filter(a => !ME.read[a.id]);
+  if (UI.sort === "Biggest impact") rows = rows.slice().sort((a,b) => b.impact.score - a.impact.score);
+  if (UI.sort === "Most covered") rows = rows.slice().sort((a,b) => (b.also_in||[]).length - (a.also_in||[]).length);
+  return rows;
+}
+function storyRow(a){
+  const imp = a.impact, read = !!ME.read[a.id], tr = !!ME.tracked[a.id];
+  const also = (a.also_in||[]).length ? ` · +${a.also_in.length} more outlets` : "";
+  return `<article class="story${read?" read":""}">
+    <div style="min-width:0">
+      <button class="t" data-open="${esc(a.id)}">${esc(a.title)}</button>
+      <div class="meta">${esc(a.publisher)} · ${esc(imp.regions.join(", "))} · ${ago(a.published)}${also}</div>
+      ${a.summary ? `<p class="sum">${esc(a.summary.slice(0,240))}${a.summary.length>240?"…":""}</p>` : ""}
+      <div class="chips"><span class="lvl ${imp.level}">${imp.level} impact</span>${imp.markets.slice(0,3).map(m=>`<span class="chip">${esc(m)}</span>`).join("")}${imp.sectors.slice(0,4).map(effChip).join("")}</div>
+    </div>
+    <div class="acts">
+      <button class="btn" data-open="${esc(a.id)}">Read</button>
+      <button class="btn ${tr?"on":""}" data-track="${esc(a.id)}">${tr?"★ Tracking":"☆ Track"}</button>
+      <button class="btn" data-readtoggle="${esc(a.id)}">${read?"Mark unread":"Mark read"}</button>
+    </div></article>`;
+}
+function renderNews(){
+  const rows = filtered();
+  const top = rows.filter(a => a.impact.level === "High").sort((a,b) => b.impact.score - a.impact.score).slice(0,4);
+  const regs = NEWS.regions || [], cats = NEWS.categories || [];
+  const okSrc = NEWS.sources.filter(s=>s.ok).length;
+  $("#view").innerHTML = `
+    <h1>Live news</h1>
+    <p class="sub">${NEWS.articles.length} stories from ${okSrc} of ${NEWS.sources.length} sources, each tagged with its likely market impact.</p>
+    <div class="filters">
+      <div class="field"><label for="q">Search</label><input type="search" id="q" placeholder="RBI, crude, Nvidia, tariff…" value="${esc(UI.q)}"></div>
+      <div class="field"><label for="reg">Region</label><select id="reg"><option value="">All regions</option>${regs.map(r=>`<option ${UI.regions.has(r)?"selected":""}>${esc(r)}</option>`).join("")}</select></div>
+      <div class="field"><label for="cat">Category</label><select id="cat"><option value="">All categories</option>${cats.map(c=>`<option ${UI.cat===c?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
+      <div class="field"><label for="hrs">Time</label><select id="hrs">${[3,6,12,24,48,72].map(h=>`<option value="${h}" ${UI.hours===h?"selected":""}>Last ${h} hours</option>`).join("")}</select></div>
+    </div>
+    <div class="filters2">
+      <span class="lbl">Impact</span><span class="seg" data-seg="level">${["All","Medium+","High"].map(x=>`<button aria-pressed="${UI.level===x}">${x}</button>`).join("")}</span>
+      <span class="lbl">Sort</span><span class="seg" data-seg="sort">${["Latest","Biggest impact","Most covered"].map(x=>`<button aria-pressed="${UI.sort===x}">${x}</button>`).join("")}</span>
+      <label class="toggle"><input type="checkbox" id="hide" ${UI.hideRead?"checked":""}> Hide stories I've read</label>
+    </div>
+    ${top.length && !UI.q ? `<h2>Market-moving now</h2><div class="top">${top.map(a=>`<button class="topcard" data-open="${esc(a.id)}"><span class="t">${esc(a.title)}</span><span class="meta">${esc(a.publisher)} · ${ago(a.published)}</span><span class="chips">${a.impact.sectors.slice(0,3).map(effChip).join("")}</span></button>`).join("")}</div>` : ""}
+    <h2>${rows.length} ${rows.length===1?"story":"stories"}</h2>
+    <div class="list">${rows.slice(0,UI.limit).map(storyRow).join("") || `<div class="empty">No stories match. Widen the time window or clear the search.</div>`}</div>
+    ${rows.length > UI.limit ? `<button class="btn more" id="more">Show more (${rows.length-UI.limit} left)</button>` : ""}
+    <p class="disc">Impact tags come from keyword rules and are indicative only, not investment advice. Prices are from Yahoo Finance and can be delayed.</p>`;
+  const q = $("#q"); q.oninput = () => { UI.q = q.value; UI.limit = 40; const pos = q.selectionStart; renderNews(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); };
+  $("#reg").onchange = e => { UI.regions = new Set(e.target.value ? [e.target.value] : []); renderNews(); };
+  $("#cat").onchange = e => { UI.cat = e.target.value; renderNews(); };
+  $("#hrs").onchange = e => { UI.hours = +e.target.value; renderNews(); };
+  $("#hide").onchange = e => { UI.hideRead = e.target.checked; renderNews(); };
+  if ($("#more")) $("#more").onclick = () => { UI.limit += 40; renderNews(); };
+}
+
+/* ================= MARKETS ================= */
+function renderMarkets(){
+  const qs = PRICES ? PRICES.quotes : [];
+  const groups = ["United States","India","Europe","Japan","China","Asia","Middle East"];
+  const tile = q => `<div class="tile"><span class="n">${esc(q.name)}</span><span class="p num">${fmt(q.last)}</span><span class="num ${q.change_pct>=0?"pos":"neg"}">${q.change_pct>=0?"▲":"▼"} ${pct(q.change_pct)}</span>${spark(q.spark)}<span class="note">1 month</span></div>`;
+  const regionNews = NEWS.articles.filter(a => a.impact.regions.includes(UI.mreg) && a.impact.level !== "Low").sort((a,b)=> b.impact.score-a.impact.score || (b.published>a.published?1:-1)).slice(0,10);
+  $("#view").innerHTML = `
+    <h1>Markets</h1>
+    <p class="sub">${PRICES ? `Prices updated ${ago(PRICES.updated)} from Yahoo Finance; they can be delayed by about 15 minutes.` : "Prices appear after the first update."}</p>
+    ${groups.map(g => { const t = qs.filter(q => q.group==="Index" && q.region===g); return t.length ? `<h2>${esc(g)}</h2><div class="tiles">${t.map(tile).join("")}</div>` : ""; }).join("")}
+    ${qs.some(q=>q.group==="Macro") ? `<h2>Commodities, currencies, bonds &amp; crypto</h2><div class="tiles">${qs.filter(q=>q.group==="Macro").map(tile).join("")}</div>` : ""}
+    <h2>News moving each region</h2>
+    <span class="seg" data-seg="mreg">${(NEWS.regions||[]).map(r=>`<button aria-pressed="${UI.mreg===r}">${esc(r)}</button>`).join("")}</span>
+    <div class="list">${regionNews.map(storyRow).join("") || `<div class="empty">No market-relevant stories for this region right now.</div>`}</div>`;
+}
+
+/* ================= TRACKER ================= */
+function renderTracker(){
+  const today = new Date().toDateString(), weekAgo = Date.now() - 7*864e5;
+  const reads = Object.entries(ME.read).sort((a,b) => b[1].localeCompare(a[1]));
+  const tracked = Object.entries(ME.tracked).sort((a,b) => b[1].added.localeCompare(a[1].added));
+  const topics = Object.keys(ME.topics).sort();
+  const art = id => BYID[id] || (ME.tracked[id] && ME.tracked[id].snap);
+  $("#view").innerHTML = `
+    <h1>My tracker</h1>
+    <p class="sub">Saved in this browser on this device.</p>
+    <div class="stats">
+      <div class="stat"><div class="v">${reads.filter(r=>new Date(r[1]).toDateString()===today).length}</div><div class="k">Read today</div></div>
+      <div class="stat"><div class="v">${reads.filter(r=>new Date(r[1])>=weekAgo).length}</div><div class="k">Read this week</div></div>
+      <div class="stat"><div class="v">${tracked.length}</div><div class="k">Stories tracked</div></div>
+      <div class="stat"><div class="v">${topics.length}</div><div class="k">Topics followed</div></div>
+    </div>
+
+    <h2>Tracked stories</h2>
+    <span class="seg" data-seg="trf">${["Following","Done","All"].map(x=>`<button aria-pressed="${UI.trf===x}">${x}</button>`).join("")}</span>
+    <div style="margin-top:12px">${tracked.filter(([,t]) => UI.trf==="All" || t.status===UI.trf).map(([id,t]) => { const a = art(id); if (!a) return "";
+      const ups = NEWS.articles.filter(x => x.published > a.published).filter(x => related(a,[x],1).length);
+      return `<div class="tcard"><button class="t btn" style="border:0;padding:0;background:none;font-family:var(--f-head);font-size:18px;font-weight:650;text-align:left;white-space:normal" data-open="${esc(id)}">${esc(a.title)}</button>
+        <div class="meta">${esc(a.publisher)} · published ${when(a.published)} · tracked ${ago(t.added)}</div>
+        <textarea data-note="${esc(id)}" placeholder="My notes: why it matters, what to check next">${esc(t.note||"")}</textarea>
+        <div class="row"><button class="btn" data-open="${esc(id)}">Read</button>
+          <button class="btn" data-status="${esc(id)}">${t.status==="Done"?"Move back to Following":"Mark done"}</button>
+          <button class="btn" data-track="${esc(id)}">Remove</button>
+          ${ups.length ? `<span class="note">${ups.length} newer update${ups.length>1?"s":""}:</span> ${ups.slice(0,3).map(x=>`<button class="btn" data-open="${esc(x.id)}">${esc(x.title.slice(0,60))}…</button>`).join("")}` : ""}</div></div>`; }).join("") || `<div class="empty">Tap <b>☆ Track</b> on any story to follow it here with your own notes.</div>`}</div>
+
+    <h2>Topics I follow</h2>
+    <form id="topicForm" class="row" style="max-width:560px"><input type="text" id="topicIn" placeholder="e.g. Adani, crude oil, Fed, Iran, semiconductor" aria-label="Topic to follow" style="flex:1"><button class="btn primary">Follow</button></form>
+    <div style="margin-top:12px">${topics.map(k => { const kl = k.toLowerCase(); const hits = NEWS.articles.filter(a => (a.title+" "+(a.summary||"")).toLowerCase().includes(kl)); const nw = hits.filter(a => (a.first_seen||a.published) > ME.topics[k].lastSeen).length;
+      return `<details class="tcard"><summary>${esc(k)} · ${hits.length} stories ${nw?`<span class="chip up">${nw} new</span>`:""}</summary>
+        <div class="row"><button class="btn" data-seen="${esc(k)}">Mark all seen</button><button class="btn" data-untopic="${esc(k)}">Stop following</button></div>
+        <div class="list">${hits.slice(0,12).map(storyRow).join("")}</div></details>`; }).join("") || `<p class="note">Follow a topic to collect every story that mentions it, with a count of new ones since you last looked.</p>`}</div>
+
+    <h2>Reading history</h2>
+    <div class="list">${reads.slice(0,60).map(([id,t]) => { const a = art(id); return a ? `<div class="story"><div><button class="t" data-open="${esc(id)}">${esc(a.title)}</button><div class="meta">${esc(a.publisher)} · read ${ago(t)}</div></div></div>` : ""; }).join("") || `<div class="empty">Stories you open appear here.</div>`}</div>
+    ${reads.length ? `<button class="btn" id="clearHist">Clear reading history</button>` : ""}`;
+  $("#topicForm").onsubmit = e => { e.preventDefault(); const v = $("#topicIn").value.trim(); if (v){ ME.topics[v] = {added:new Date().toISOString(), lastSeen:new Date().toISOString()}; save(); renderTracker(); } };
+  document.querySelectorAll("[data-note]").forEach(t => t.oninput = () => { const x = ME.tracked[t.dataset.note]; if (x){ x.note = t.value; save(); } });
+  if ($("#clearHist")) $("#clearHist").onclick = () => { ME.read = {}; save(); renderTracker(); };
+}
+
+/* ================= SOURCES & SETTINGS ================= */
+function renderSources(){
+  $("#view").innerHTML = `
+    <h1>Sources &amp; settings</h1>
+    <p class="sub">News and prices refresh automatically every 15 minutes. Last update ${ago(NEWS.updated)} (${when(NEWS.updated)}).</p>
+    <h2>News sources</h2>
+    <div class="tablewrap"><table><thead><tr><th>Source</th><th>Region</th><th>Category</th><th>Status</th><th>Stories</th></tr></thead><tbody>
+    ${NEWS.sources.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.region)}</td><td>${esc(s.category)}</td><td>${s.ok?'<span class="pos">✓ working</span>':`<span class="neg">✗</span> <span class="note">${esc(s.error||"no response")}</span>`}</td><td class="num">${s.count||0}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="note">To add or remove a source, edit the SOURCES list in <code>scripts/update_data.py</code> on GitHub.</p>
+
+    <h2>AI impact analysis (optional)</h2>
+    <p style="max-width:70ch">Add your own Anthropic API key to get a reasoned market-impact note on any story. The key is kept only in this browser and is sent only to Anthropic. Each analysis costs a fraction of a cent with the default model.</p>
+    <div class="row" style="max-width:640px">
+      <input type="password" id="key" placeholder="sk-ant-…" value="${esc(ME.key)}" aria-label="Anthropic API key" style="flex:1">
+      <select id="model" aria-label="Model" style="width:auto"><option value="${DEFAULT_MODEL}">Claude Haiku 4.5 (cheapest)</option><option value="claude-sonnet-5-5" ${ME.model==="claude-sonnet-5-5"?"selected":""}>Claude Sonnet 5.5 (deeper)</option></select>
+      <button class="btn primary" id="saveKey">Save</button>
+      ${ME.key ? `<button class="btn" id="delKey">Remove key</button>` : ""}
+    </div>
+    <p class="note" id="keyState">${ME.key ? "Key saved in this browser." : "No key saved."}</p>
+
+    <h2>Your data</h2>
+    <p class="note">Your tracked stories, notes, topics and reading history are stored only in this browser. Clearing browser data removes them.</p>
+    <button class="btn" id="wipe">Delete all my tracker data</button>
+    <p class="disc">WorldPulse shows headlines and short summaries from public RSS feeds and links to the original publishers. Impact tags are indicative, not investment advice.</p>`;
+  $("#saveKey").onclick = () => { ME.key = $("#key").value.trim(); ME.model = $("#model").value; save(); renderSources(); };
+  if ($("#delKey")) $("#delKey").onclick = () => { ME.key = ""; save(); renderSources(); };
+  $("#wipe").onclick = e => { if (e.target.dataset.armed){ ME.read={}; ME.tracked={}; ME.topics={}; ME.ai={}; save(); renderSources(); } else { e.target.dataset.armed = 1; e.target.textContent = "Tap again to delete everything"; } };
+}
+
+/* ================= READER ================= */
+function openStory(id){
+  const a = BYID[id] || (ME.tracked[id] && ME.tracked[id].snap);
+  if (!a) return;
+  if (!ME.read[id]){ ME.read[id] = new Date().toISOString(); save(); }
+  const imp = a.impact, tr = !!ME.tracked[id];
+  const mk = imp.markets.length ? imp.markets : [NEWS.region_main_index?.[a.region] || "S&P 500"];
+  const allQ = PRICES ? PRICES.quotes.map(q=>q.name) : [];
+  const opts = mk.filter(m => allQ.includes(m)).concat(allQ.filter(m => !mk.includes(m)));
+  const rel = related(a, NEWS.articles, 6);
+  $("#readerHost").innerHTML = `<div class="scrim" data-close></div>
+  <aside class="reader" role="dialog" aria-modal="true" aria-labelledby="rtitle">
+    <div class="rtop"><button class="btn" data-close>← Back</button><span class="lvl ${imp.level}">${imp.level} impact</span></div>
+    <h1 id="rtitle">${esc(a.title)}</h1>
+    <div class="meta">${esc(a.publisher)} · ${when(a.published)} (${ago(a.published)})</div>
+    ${(a.also_in||[]).length ? `<div class="note" style="margin-top:4px">Also reported by ${esc(a.also_in.slice(0,10).join(", "))}</div>` : ""}
+    <div class="rbtns"><a class="btn primary" href="${esc(safeUrl(a.link))}" target="_blank" rel="noopener noreferrer">Read full story at the source ↗</a>
+      <button class="btn ${tr?"on":""}" data-track="${esc(id)}">${tr?"★ Tracking":"☆ Track this story"}</button></div>
+    ${a.summary ? `<p style="font-size:16px;max-width:65ch">${esc(a.summary)}</p>` : `<p class="note">The feed gave no summary for this story. Use the button above to read it at the source.</p>`}
+
+    <div class="box"><h3>Market impact</h3>
+      <div class="chips">${imp.markets.map(m=>`<span class="chip">${esc(m)}</span>`).join("")}</div>
+      <p style="margin:8px 0">${esc(imp.summary)}</p>
+      <div class="chips">${imp.sectors.map(effChip).join("")}</div>
+      ${imp.sectors.length ? `<p class="note" style="margin-top:8px">▲ likely positive · ▼ likely negative · ◆ depends, watch it. From keyword rules, indicative only.</p>` : ""}
+    </div>
+
+    <div class="box ai" id="aiBox"><h3>AI analysis</h3><div id="aiBody"></div></div>
+
+    <div class="box"><h3>How the market reacted</h3>
+      ${opts.length ? `<select id="rxSel" aria-label="Market" style="width:auto">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select><div id="rxBody"></div>` : `<p class="note">Price data appears after the first update.</p>`}
+    </div>
+
+    <h2 style="font-size:19px">Related coverage</h2>
+    <div class="list">${rel.map(x=>`<div class="story"><div><button class="t" style="font-size:16px" data-open="${esc(x.id)}">${esc(x.title)}</button><div class="meta">${esc(x.publisher)} · ${ago(x.published)}</div></div></div>`).join("") || `<p class="note">No related stories right now.</p>`}</div>
+  </aside>`;
+  document.body.style.overflow = "hidden";
+  renderAI(a);
+  if ($("#rxSel")){ $("#rxSel").onchange = () => renderReaction(a, $("#rxSel").value); renderReaction(a, $("#rxSel").value); }
+  $(".reader").focus?.();
+  if (location.hash !== "#story-" + id) history.pushState(null, "", "#story-" + id);
+}
+function closeReader(back=true){
+  if (!$("#readerHost").innerHTML) return;
+  $("#readerHost").innerHTML = ""; document.body.style.overflow = "";
+  if (back && location.hash.startsWith("#story-")) history.pushState(null, "", "#" + (UI.lastView || "news"));
+  render();
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeReader(); });
+
+function renderReaction(a, name){
+  const q = quote(name), box = $("#rxBody");
+  if (!q || !q.intraday || q.intraday.length < 2){ box.innerHTML = `<p class="note">No intraday prices for ${esc(name)}.</p>`; return; }
+  const pts = q.intraday.map(([t,v]) => [new Date(t).getTime(), v]), t0 = new Date(a.published).getTime();
+  const before = pts.filter(p => p[0] <= t0);
+  let html = "";
+  if (before.length){
+    const [st, sp] = before[before.length-1], last = pts[pts.length-1][1];
+    const win = pts.filter(p => p[0] > t0 && p[0] <= t0 + 120*60e3);
+    html += `<div class="rx">${win.length ? `<div><span class="note">First 2 hours</span><span class="num ${win[win.length-1][1]>=sp?"pos":"neg"}">${pct((win[win.length-1][1]/sp-1)*100)}</span></div>` : ""}<div><span class="note">Since the story</span><span class="num ${last>=sp?"pos":"neg"}">${pct((last/sp-1)*100)}</span></div></div>`;
+    if (t0 - st > 3*3600e3) html += `<p class="note">The market was closed when this came out, so the move is measured from the last close.</p>`;
+  } else html += `<p class="note">This story is older than the price history shown (last 5 trading days).</p>`;
+  // chart
+  const W = 640, H = 190, pad = 28, xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), yr = (y1-y0)||1;
+  const X = t => pad + (t-x0)/(x1-x0)*(W-pad-8), Y = v => 10 + (1-(v-y0)/yr)*(H-34);
+  const line = pts.map(p => X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ");
+  const days = [...new Set(pts.map(p => new Date(p[0]).toDateString()))].map(d => pts.find(p => new Date(p[0]).toDateString()===d)[0]);
+  const newsX = t0 >= x0 && t0 <= x1 ? X(t0) : null;
+  html += `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(name)} over the last 5 trading days, with the story time marked">
+    <line x1="${pad}" x2="${W-8}" y1="${Y(y1)}" y2="${Y(y1)}" stroke="var(--line)"/><line x1="${pad}" x2="${W-8}" y1="${Y(y0)}" y2="${Y(y0)}" stroke="var(--line)"/>
+    <text x="2" y="${Y(y1)+4}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)">${fmt(y1)}</text><text x="2" y="${Y(y0)+4}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)">${fmt(y0)}</text>
+    ${days.map(d=>`<text x="${X(d)+2}" y="${H-6}" font-size="10" fill="var(--muted)">${new Date(d).toLocaleDateString(undefined,{weekday:"short",day:"numeric"})}</text>`).join("")}
+    <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
+    ${newsX!==null ? `<line x1="${newsX}" x2="${newsX}" y1="6" y2="${H-22}" stroke="var(--med)" stroke-dasharray="4 3" stroke-width="1.5"/><text x="${Math.min(newsX+4,W-40)}" y="16" font-size="11" fill="var(--med)" font-weight="600">News</text>` : ""}
+  </svg><p class="note">Markets move for many reasons at once. This shows timing, not cause.</p>`;
+  box.innerHTML = html;
+}
+
+/* ---------- Claude analysis (runs in your browser with your own key) ---------- */
+function renderAI(a){
+  const body = $("#aiBody"), r = ME.ai[a.id];
+  if (r){
+    const arrow = d => d==="up"?"▲":d==="down"?"▼":"◆", cls = d => d==="up"?"pos":d==="down"?"neg":"";
+    body.innerHTML = `<p style="margin:0 0 8px">${esc(r.headline_view||"")}</p>
+      ${(r.markets||[]).length ? `<b>Markets</b><ul>${r.markets.map(m=>`<li><span class="${cls(m.direction)}">${arrow(m.direction)}</span> <b>${esc(m.name)}</b> – ${esc(m.why)}</li>`).join("")}</ul>` : ""}
+      ${(r.sectors||[]).length ? `<b>Sectors</b><ul>${r.sectors.map(m=>`<li><span class="${cls(m.direction)}">${arrow(m.direction)}</span> ${esc(m.name)} – ${esc(m.why)}</li>`).join("")}</ul>` : ""}
+      ${(r.stocks_to_watch||[]).length ? `<p><b>Stocks to watch:</b> ${esc(r.stocks_to_watch.join(", "))}</p>` : ""}
+      <p class="note">Horizon: ${esc(r.time_horizon||"–")} · Confidence: ${esc(r.confidence||"–")}${r.what_to_watch_next?` · Next: ${esc(r.what_to_watch_next)}`:""}</p>`;
+    return;
+  }
+  if (!ME.key){ body.innerHTML = `<p class="note" style="margin:0">Add your Anthropic API key on the <a href="#sources" data-close>Sources &amp; settings</a> page to get a reasoned impact note for any story.</p>`; return; }
+  body.innerHTML = `<button class="btn primary" id="aiGo">Analyse impact with Claude</button>`;
+  $("#aiGo").onclick = async () => {
+    body.innerHTML = `<p class="note">Asking Claude…</p>`;
+    try{
+      const prompt = `You are a careful markets analyst. Read the news below and explain its likely impact on share markets.
+Return ONLY valid JSON: {"headline_view":"one sentence","markets":[{"name":"","direction":"up|down|mixed","why":""}],"sectors":[{"name":"","direction":"up|down|mixed","why":""}],"stocks_to_watch":[],"time_horizon":"intraday|days|weeks|long term","confidence":"low|medium|high","what_to_watch_next":""}
+At most 4 markets and 5 sectors. If the story has little market relevance, say so.
+TITLE: ${a.title}
+SOURCE: ${a.publisher}  PUBLISHED (UTC): ${a.published}
+SUMMARY: ${a.summary||"(none)"}`;
+      const r = await fetch("https://api.anthropic.com/v1/messages", {method:"POST",
+        headers:{"content-type":"application/json","x-api-key":ME.key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({model: ME.model || DEFAULT_MODEL, max_tokens: 900, messages:[{role:"user", content: prompt}]})});
+      const j = await r.json();
+      if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+      const text = (j.content||[]).map(c => c.text||"").join(""), m = text.match(/\{[\s\S]*\}/);
+      ME.ai[a.id] = m ? JSON.parse(m[0]) : {headline_view: text}; save(); renderAI(a);
+    }catch(err){ body.innerHTML = `<p class="neg" style="margin:0 0 8px">Couldn't get an analysis: ${esc(err.message)}. Check your key on the Sources &amp; settings page.</p><button class="btn" id="aiGo2">Try again</button>`; $("#aiGo2").onclick = () => renderAI(a); }
+  };
+}
+
+/* ================= global clicks ================= */
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-open],[data-track],[data-readtoggle],[data-close],[data-status],[data-seen],[data-untopic],.seg button");
+  if (!t) return;
+  if (t.dataset.open){ e.preventDefault(); openStory(t.dataset.open); return; }
+  if (t.dataset.close !== undefined){ closeReader(t.tagName !== "A"); return; }
+  if (t.dataset.track){ const id = t.dataset.track;
+    if (ME.tracked[id]) delete ME.tracked[id];
+    else { const a = BYID[id]; ME.tracked[id] = {added:new Date().toISOString(), note:"", status:"Following", snap: a ? {id:a.id,title:a.title,link:a.link,publisher:a.publisher,published:a.published,summary:a.summary,region:a.region,impact:a.impact,also_in:a.also_in} : null}; }
+    save(); if ($("#readerHost").innerHTML && $("#rtitle")) { const open = location.hash.slice(7); render(); openStory(open); } else render(); return; }
+  if (t.dataset.readtoggle){ const id = t.dataset.readtoggle; if (ME.read[id]) delete ME.read[id]; else ME.read[id] = new Date().toISOString(); save(); render(); return; }
+  if (t.dataset.status){ const x = ME.tracked[t.dataset.status]; x.status = x.status === "Done" ? "Following" : "Done"; save(); render(); return; }
+  if (t.dataset.seen){ ME.topics[t.dataset.seen].lastSeen = new Date().toISOString(); save(); render(); return; }
+  if (t.dataset.untopic){ delete ME.topics[t.dataset.untopic]; save(); render(); return; }
+  const seg = t.parentElement.dataset.seg;
+  if (seg){ UI[seg] = t.textContent; UI.limit = 40; render(); }
+});
+
+refresh(true);
+</script>
+</body>
+</html>

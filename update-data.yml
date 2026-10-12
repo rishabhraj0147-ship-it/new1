@@ -1,0 +1,63 @@
+# WorldPulse: fetches fresh news and prices every 15 minutes, saves them in data/,
+# and publishes the website on GitHub Pages.
+# One-time setup: Settings → Pages → Source = "GitHub Actions".
+name: Update news and publish site
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"     # every 15 minutes (GitHub sometimes starts it a few minutes late)
+  workflow_dispatch:            # adds a "Run workflow" button on the Actions tab
+  push:
+    branches: [main]            # re-publish when you edit index.html
+    paths-ignore: ["data/**"]
+
+permissions:
+  contents: write     # to save data/news.json and data/prices.json
+  pages: write        # to publish the site
+  id-token: write
+
+concurrency:
+  group: worldpulse
+  cancel-in-progress: false
+
+jobs:
+  update-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Fetch news and prices
+        run: python scripts/update_data.py
+
+      - name: Save data to the repository
+        run: |
+          git config user.name "worldpulse-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "Nothing changed"
+          else
+            git commit -m "Update news and prices $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase --autostash
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
