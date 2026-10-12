@@ -30,3 +30,7 @@ A GitHub Action runs `scripts/update_data.py` every 15 minutes. The script fetch
 
 ## Not investment advice
 Impact tags come from keyword rules (or AI, if you add a key) and are indicative only. Prices come from Yahoo Finance and can be delayed.
+
+## License
+
+© 2026 Rishabh Raj. All rights reserved. No copying, reuse or republishing of this code or design without written permission. See [LICENSE](LICENSE).

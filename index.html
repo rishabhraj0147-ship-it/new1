@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>WorldPulse</title>
+<meta name="copyright" content="© 2026 Rishabh Raj. All rights reserved.">
+<meta name="author" content="Rishabh Raj">
 <meta name="description" content="World news from 30 sources, tagged with its likely impact on share markets. Updates every 15 minutes.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -286,6 +288,10 @@ th{color:color-mix(in srgb,var(--sec) 55%,var(--muted));font-weight:700;backgrou
   .live{font-size:12px}
 }
 @media (prefers-reduced-motion:reduce){body{transition:none}}
+.site-foot{font-size:12.5px;color:var(--muted);padding-block:18px 28px;border-top:1px solid var(--line)}
+body.guard{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.guard input,body.guard textarea,body.guard select,body.guard [contenteditable]{-webkit-user-select:text;user-select:text}
+img{-webkit-user-drag:none}
 </style>
 </head>
 <body>
@@ -308,6 +314,7 @@ th{color:color-mix(in srgb,var(--sec) 55%,var(--muted));font-weight:700;backgrou
 
 <div class="edu" role="note"><div class="wrap"><b>For education only.</b> WorldPulse is a learning tool, not investment advice. Nothing here is a recommendation to buy or sell. Past returns don't guarantee future returns. Please consult a SEBI-registered investment adviser before investing.</div></div>
 <main class="wrap" id="view"></main>
+<footer class="site-foot"><div class="wrap">© 2026 WorldPulse by Rishabh Raj. All rights reserved. The design, code and content of this site may not be copied, reproduced or republished without written permission.</div></footer>
 <div id="readerHost"></div>
 <div id="toastHost"></div>
 
@@ -1190,6 +1197,24 @@ document.addEventListener("click", e => {
 });
 
 refresh(true);
+</script>
+<script>
+/* Copy guard: discourages casual copying (right-click, select-all, view-source and dev-tool shortcuts, image dragging).
+   Typing in search boxes and forms still works normally. */
+(function(){
+  document.body.classList.add("guard");
+  const typing = el => el && el.closest && el.closest("input,textarea,select,[contenteditable]");
+  document.addEventListener("contextmenu", e => { if (!typing(e.target)) e.preventDefault(); });
+  document.addEventListener("dragstart", e => { if (e.target.tagName === "IMG") e.preventDefault(); });
+  document.addEventListener("copy", e => { if (!typing(e.target)) e.preventDefault(); });
+  document.addEventListener("keydown", e => {
+    const k = (e.key || "").toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    if (e.key === "F12" || (mod && e.shiftKey && ["i","j","c"].includes(k)) || (mod && e.altKey && ["i","j","c","u"].includes(k))
+        || (mod && ["u","s","p"].includes(k)) || (mod && k === "a" && !typing(e.target))) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  try { console.log("%cWorldPulse © 2026 Rishabh Raj. All rights reserved.", "font:600 14px sans-serif;color:#6B3CF0");
+        console.log("Copying or republishing this site's code or design is not permitted."); } catch(_){}
+})();
 </script>
 </body>
 </html>
