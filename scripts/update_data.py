@@ -303,6 +303,35 @@ def story_key(title: str) -> str:
     return " ".join(sorted(set(words))[:8])
 
 
+def image_of(entry) -> str:
+    """Best picture the feed gives for a story: media:content / media:thumbnail / image enclosure / <img> in the summary."""
+    best, best_w = "", -1
+    for key in ("media_content", "media_thumbnail"):
+        for m in entry.get(key) or []:
+            url = (m.get("url") or "").strip()
+            if not url.startswith("http") or (m.get("medium") not in (None, "", "image") and key == "media_content"):
+                continue
+            try:
+                w = int(m.get("width") or 0)
+            except ValueError:
+                w = 0
+            if w > best_w:
+                best, best_w = url, w
+    if not best:
+        for l in entry.get("links") or []:
+            if l.get("rel") == "enclosure" and str(l.get("type", "")).startswith("image") and str(l.get("href", "")).startswith("http"):
+                best = l["href"]
+                break
+    if not best:
+        m = re.search(r'<img[^>]+src="(https?://[^"]+)"', entry.get("summary", "") or entry.get("description", "") or "")
+        if m:
+            best = html.unescape(m.group(1))
+    # tiny tracking pixels and icons are not useful pictures
+    if best and re.search(r"(1x1|pixel|spacer|favicon|logo)", best, re.I):
+        best = ""
+    return best
+
+
 def parse_feed(raw: bytes | str, source: dict) -> list[dict]:
     """Turn one RSS/Atom document into clean article dicts."""
     feed = feedparser.parse(raw)
@@ -330,6 +359,7 @@ def parse_feed(raw: bytes | str, source: dict) -> list[dict]:
             "published": (_when(e) or datetime.now(timezone.utc)).isoformat(),
             "region": source.get("region", "Global"),
             "category": source.get("category", "World"),
+            "img": image_of(e),
         })
     return out
 
@@ -374,6 +404,8 @@ def merge_duplicates(articles: list[dict]) -> list[dict]:
                 g["also_in"].append(a["publisher"])
             if not g["summary"] and a["summary"]:
                 g["summary"] = a["summary"]
+            if not g.get("img") and a.get("img"):
+                g["img"] = a["img"]
         else:
             a = dict(a)
             a["also_in"] = []
