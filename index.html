@@ -449,7 +449,7 @@ function renderUniverse(){
   else if (UI.ux === "US") rows = rows.filter(r => r[2]!=="NSE" && r[2]!=="BSE");
   else if (UI.ux) rows = rows.filter(r => r[2] === UI.ux);
   if (q) rows = rows.filter(r => r[0].toLowerCase().includes(q) || r[1].toLowerCase().includes(q));
-  const sectors = [...new Set(rows.map(r => r[10]).filter(Boolean))].sort(), sizes = ["Mega cap","Large cap","Mid cap","Small cap","Micro cap"].filter(z => rows.some(r => r[11]===z));
+  const sectors = [...new Set(rows.map(r => r[10]).filter(Boolean))].sort(), sizes = ["Mega cap","Large cap","Mid cap","Small cap","Micro cap","Below top 750"].filter(z => rows.some(r => r[11]===z));
   if (UI.usz) rows = rows.filter(r => r[11] === UI.usz);
   const base = rows;
   if (UI.usec) rows = rows.filter(r => (r[10]||"Unclassified") === UI.usec);

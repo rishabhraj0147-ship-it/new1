@@ -221,7 +221,7 @@ def build(listings: list[dict], download=_download, pause=1.0, meta=None, shards
                     if p:
                         m = meta.get(x["t"], {})
                         rows.append([x["t"], x["n"][:70], x["x"], p["p"], p["d1"], p["w1"], p["m1"], p["m6"], p["y1"], p["as_of"],
-                                     m.get("sector") or "", m.get("size") or "", m.get("country") or ("India" if x["x"] in ("NSE", "BSE") else ""),
+                                     m.get("sector") or "", m.get("size") or ("Below top 750" if x["x"] == "NSE" else ""), m.get("country") or ("India" if x["x"] in ("NSE", "BSE") else ""),
                                      m.get("industry") or ""])
                         if shards is not None:
                             shards.setdefault(shard_of(x["t"]), {})[x["t"]] = _series(df[x["t"]])
