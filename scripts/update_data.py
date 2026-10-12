@@ -165,7 +165,7 @@ SECTOR_RULES = [
      "sectors": {"Metals & Mining": 0, "Gold": 0, "Jewellery": 0}},
     {"name": "Earnings", "keywords": ["earnings", "quarterly results", "profit", "revenue", "q1 ", "q2 ", "q3 ", "q4 ", "guidance"],
      "sectors": {"Company-specific": 0}},
-    {"name": "Banking & credit", "keywords": ["bank", "loan", "npa", "credit", "default", "bond yield", "debt"],
+    {"name": "Banking & credit", "keywords": ["banks", "bank stocks", "bank shares", "banking sector", "lender", "npa", "bad loan", "credit growth", "loan growth", "default", "bond yield"],
      "sectors": {"Banks & Financials": 0}},
     {"name": "Auto & EV", "keywords": ["car sales", "auto sales", "electric vehicle", " ev ", "tesla", "automaker"],
      "sectors": {"Auto": 0, "Batteries": 0}},
@@ -206,6 +206,66 @@ THEME_ASSETS = {
     "Currency": ["USD/INR"],
     "Crypto": ["Bitcoin"],
     "Interest rates": ["US 10Y yield"],
+}
+
+# Who gains / who loses for each theme. "up"/"down" = direction of the theme (oil up, rates up, tariffs up…);
+# "pos"/"neg" = direction of the story's tone when the theme has no up/down hint. "any" = when unclear.
+THEME_IMPACT = {
+    "Oil price": {
+        "up":   (["Oil & gas producers", "Oil-exporting countries"],
+                 ["Airlines", "Paints & chemicals", "Oil marketing companies", "Oil importers like India (inflation, rupee)"]),
+        "down": (["Airlines", "Paints & chemicals", "Oil marketing companies", "Oil importers like India"],
+                 ["Oil & gas producers", "Oil-exporting countries"]),
+        "any":  (["Oil producers if prices rise; airlines & paints if they fall"],
+                 ["Airlines & paints if prices rise; oil producers if they fall"])},
+    "Interest rates": {
+        "down": (["Banks & lenders (loan growth)", "Real estate", "Auto (cheaper loans)", "Bond prices"],
+                 ["Savers / fixed-deposit returns", "Home currency may weaken"]),
+        "up":   (["Bank margins", "Savers / fixed-deposit returns"],
+                 ["Real estate", "Auto", "Growth & tech stocks", "Bond prices"]),
+        "any":  (["Banks, real estate & auto if rates fall"], ["Real estate, auto & growth stocks if rates rise"])},
+    "Trade & tariffs": {
+        "up":   (["Domestic producers protected by tariffs"],
+                 ["Exporters", "Auto & components", "Metals", "Global trade-linked stocks"]),
+        "down": (["Exporters", "Auto & components", "Metals", "Manufacturing"], ["Safe havens like gold"]),
+        "any":  (["Exporters if trade eases"], ["Exporters, auto & metals if tariffs rise"])},
+    "Geopolitical risk": {
+        "calm": (["Airlines & travel", "Broad equity markets", "Oil-importing economies"], ["Defence", "Gold", "Oil producers"]),
+        "any":  (["Defence", "Gold", "Oil producers"], ["Airlines & travel", "Broad equity markets", "Oil-importing economies"])},
+    "Tech & AI": {
+        "pos":  (["Technology & semiconductors", "IT services", "Data-centre & power suppliers"], ["Businesses disrupted by AI"]),
+        "neg":  (["Defensive sectors (FMCG, pharma)"], ["Technology & semiconductors", "IT services"]),
+        "any":  (["Chip & tech suppliers if demand holds"], ["Tech stocks if spending slows"])},
+    "Currency": {
+        "any":  (["Exporters & IT services (if home currency weakens)"], ["Importers: oil, electronics (if home currency weakens)"])},
+    "Gold & metals": {
+        "pos":  (["Metals & mining", "Gold holders"], ["Jewellery makers", "Auto & construction (input costs)"]),
+        "neg":  (["Jewellery, auto & construction (cheaper inputs)"], ["Metals & mining"]),
+        "any":  (["Metals & mining if prices rise"], ["Jewellery & auto if metal prices rise"])},
+    "Earnings": {
+        "pos":  (["The company and its sector peers"], []),
+        "neg":  ([], ["The company and its sector peers"]),
+        "any":  (["The company if results beat estimates"], ["The company if results miss estimates"])},
+    "Banking & credit": {
+        "pos":  (["Banks & financials"], []),
+        "neg":  ([], ["Banks & financials", "Credit-sensitive sectors"]),
+        "any":  (["Banks if credit quality holds"], ["Banks if bad loans rise"])},
+    "Auto & EV": {
+        "pos":  (["Auto makers", "Battery & component suppliers"], []),
+        "neg":  ([], ["Auto makers", "Battery & component suppliers"]),
+        "any":  (["Auto makers if demand improves"], ["Auto makers if sales weaken"])},
+    "Pharma & health": {
+        "pos":  (["Pharma & healthcare"], []),
+        "neg":  ([], ["Pharma & healthcare"]),
+        "any":  (["Pharma if approvals come through"], ["Pharma if regulators push back"])},
+    "Government & budget": {
+        "pos":  (["Infrastructure & capital goods", "Broad market sentiment"], []),
+        "neg":  ([], ["Bond yields / fiscal deficit", "Broad market sentiment"]),
+        "any":  (["Sectors that get spending or tax relief"], ["Sectors that lose subsidies or face higher tax"])},
+    "Crypto": {
+        "pos":  (["Crypto assets & exchanges"], []),
+        "neg":  ([], ["Crypto assets & exchanges"]),
+        "any":  (["Crypto if sentiment improves"], ["Crypto if regulation tightens"])},
 }
 
 # =============================================================================
@@ -381,7 +441,30 @@ def analyze_rules(article: dict) -> dict:
         "fed", "rbi", "ecb", "rate", "inflation", "gdp", "tariff"])
     level = "High" if score >= 8 else "Medium" if score >= 4 else "Low"
 
+    positive, negative = [], []
+    for th in themes:
+        t = THEME_IMPACT.get(th)
+        if not t:
+            continue
+        hint = DIRECTION_HINTS.get(th)
+        key = "any"
+        if hint:
+            up, down = _count(text, hint["up"]), _count(text, hint["down"])
+            key = "up" if up > down else "down" if down > up else "any"
+        elif th == "Geopolitical risk":
+            calm = _count(text, ["ceasefire", "peace", "truce", "de-escalat", "peace talks", "agreement"])
+            hot = _count(text, ["attack", "strike", "missile", "invasion", "escalat", "bomb", "war"])
+            key = "calm" if calm > hot else "any"
+        elif tone and (("pos" if tone > 0 else "neg") in t):
+            key = "pos" if tone > 0 else "neg"
+        p, n = t.get(key, t["any"])
+        positive += [x for x in p if x not in positive]
+        negative += [x for x in n if x not in negative]
+
     return {
+        "crux": crux_of(article),
+        "positive": positive[:4],
+        "negative": negative[:4],
         "source": "rules",
         "regions": regions,
         "markets": markets,
@@ -392,6 +475,19 @@ def analyze_rules(article: dict) -> dict:
         "level": level,
         "summary": _explain(themes, tone, regions),
     }
+
+
+def crux_of(article: dict) -> str:
+    """The point of the story in one line: the summary's first sentence if it adds something, else the headline."""
+    title = (article.get("title") or "").strip()
+    summ = re.sub(r"\s+", " ", article.get("summary") or "").strip()
+    if summ and summ.lower()[:60] != title.lower()[:60]:
+        first = re.split(r"(?<=[.!?])\s+", summ)[0]
+        if 40 <= len(first) <= 260:
+            return first
+        if len(first) > 260:
+            return first[:250].rsplit(" ", 1)[0] + "…"
+    return title
 
 
 def _explain(themes, tone, regions) -> str:
@@ -451,6 +547,60 @@ def fetch_prices(history=_history) -> dict:
     return {"quotes": [quotes[n] for n in order if n in quotes]}
 
 
+
+# =============================================================================
+# OPTIONAL: CLAUDE WRITES THE CRUX + IMPACT (only if the ANTHROPIC_API_KEY secret is set)
+# =============================================================================
+AI_MODEL = os.environ.get("WORLDPULSE_MODEL", "claude-haiku-4-5-20251001")
+AI_MAX_PER_RUN = 200       # new stories analysed per run (keeps cost low)
+AI_PROMPT = """You are a markets analyst writing for busy retail investors in India and worldwide.
+For EACH news item below, return:
+- "crux": the core of the story in ONE plain sentence (max 30 words), facts only.
+- "positive": up to 3 short phrases naming who could GAIN in markets (sectors, assets, countries, or named companies) and why, e.g. "Oil producers – higher realisations".
+- "negative": up to 3 short phrases naming who could LOSE and why.
+If an item has no real market relevance, use empty lists.
+Return ONLY a JSON array: [{"id": "...", "crux": "...", "positive": ["..."], "negative": ["..."]}]
+
+ITEMS:
+"""
+
+
+def ai_enrich(articles: list[dict], previous: dict) -> int:
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    for a in articles:                       # reuse earlier AI notes
+        if a["id"] in previous:
+            a["ai"] = previous[a["id"]]
+    if not key:
+        return 0
+    todo = [a for a in articles if "ai" not in a]
+    todo.sort(key=lambda a: (a["impact"]["score"], a["published"]), reverse=True)
+    todo = todo[:AI_MAX_PER_RUN]
+    done = 0
+    for i in range(0, len(todo), 20):
+        batch = todo[i:i + 20]
+        items = "\n".join(json.dumps({"id": a["id"], "title": a["title"], "summary": (a.get("summary") or "")[:400]},
+                                      ensure_ascii=False) for a in batch)
+        try:
+            r = requests.post("https://api.anthropic.com/v1/messages", timeout=90, headers={
+                "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                json={"model": AI_MODEL, "max_tokens": 4000, "messages": [{"role": "user", "content": AI_PROMPT + items}]})
+            r.raise_for_status()
+            text = "".join(c.get("text", "") for c in r.json().get("content", []))
+            m = re.search(r"\[.*\]", text, re.S)
+            rows = json.loads(m.group(0)) if m else []
+        except Exception as exc:
+            print(f"  AI batch failed: {exc}", file=sys.stderr)
+            continue
+        by = {a["id"]: a for a in batch}
+        for row in rows:
+            a = by.get(str(row.get("id")))
+            if a and row.get("crux"):
+                a["ai"] = {"crux": str(row["crux"])[:300],
+                           "positive": [str(x)[:120] for x in (row.get("positive") or [])][:3],
+                           "negative": [str(x)[:120] for x in (row.get("negative") or [])][:3]}
+                done += 1
+    return done
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -486,10 +636,14 @@ def build_news(fetcher=fetch_source) -> dict:
         a["impact"] = analyze_rules(a)
         arts.append(a)
     arts.sort(key=lambda x: x["published"], reverse=True)
+    arts = arts[:MAX_STORIES]
+    n_ai = ai_enrich(arts, {a["id"]: a["ai"] for a in old.get("articles", []) if a.get("ai")})
+    if n_ai:
+        print(f"  Claude wrote crux + impact for {n_ai} new stories")
     return {"updated": now.isoformat(), "sources": [{"name": s["name"], "region": s["region"], "category": s["category"],
             **{k: v for k, v in health.get(s["name"], {}).items() if k != "url"}} for s in SOURCES],
             "regions": REGIONS, "categories": CATEGORIES, "region_main_index": REGION_MAIN_INDEX,
-            "articles": arts[:MAX_STORIES]}
+            "articles": arts}
 
 
 def main():

@@ -39,6 +39,9 @@ jobs:
 
       - name: Fetch news and prices
         run: python scripts/update_data.py
+        env:
+          # Optional: add a repository secret named ANTHROPIC_API_KEY and Claude writes the crux + impact
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Save data to the repository
         run: |
