@@ -160,6 +160,17 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 .form input[type=number]{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;font-family:var(--f-mono)}
 .res{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
 .res .stat .v{font-size:22px}
+.smap{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:12px}
+.stile{border-radius:10px;padding:10px 12px;cursor:pointer;border:1px solid var(--line);text-align:left;background:var(--surface);display:flex;flex-direction:column;gap:2px;min-width:0}
+.stile .sn{font-weight:600;font-size:14px;line-height:1.25}
+.stile .sv{font-family:var(--f-mono);font-size:18px}
+.stile .sc{font-size:12px;color:var(--muted)}
+.linkish{background:none;border:0;padding:0;color:var(--ink);text-align:left;cursor:pointer;font:inherit}
+.linkish:hover{text-decoration:underline;text-underline-offset:3px}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:12px 0}
+.kv div{background:var(--sunk);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.catmap{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:14px 0}
 .legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:6px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 </style>
@@ -193,7 +204,7 @@ const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 let NEWS = null, PRICES = null, PERF = null, FUNDS = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
 const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following",
   tk:"All listed stocks", tp:"1Y", tsort:null, tdir:-1, fcat:"",
-  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50};
+  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50, usec:"", usz:"", uv:"List"};
 
 const LS = "worldpulse:v1";
 let ME = load();
@@ -374,6 +385,8 @@ function topRows(){
   const m = {"Indian stocks":"India","US stocks":"US","Global stocks":"Global"}[UI.tk];
   return PERF.stocks.filter(x => x.market === m);
 }
+function heat(v){ if (v == null) return "var(--surface)"; const a = Math.min(Math.abs(v)/ (Math.abs(v) > 30 ? 60 : 20), 1) * .9 + .1;
+  return `color-mix(in srgb, var(${v>=0?"--up-soft":"--down-soft"}) ${Math.round(a*100)}%, var(--surface))`; }
 function renderTop(){
   if (UI.tk === "All listed stocks") return renderUniverse();
   const fund = UI.tk === "Mutual funds";
@@ -393,12 +406,14 @@ function renderTop(){
       <span class="lbl">Rank by</span><span class="seg" data-seg="tp">${periods.map(p=>`<button aria-pressed="${UI.tp===p[0]}">${p[0]}</button>`).join("")}</span>
       ${fund ? `<select id="fcat" aria-label="Fund category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${UI.fcat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>` : ""}
     </div>
+    ${fund && FUNDS ? `<h2>Fund categories</h2><div class="catmap">${cats.map(c => { const fs = FUNDS.funds.filter(f=>f.category===c && f[key]!=null), avg = fs.length ? fs.reduce((a,f)=>a+f[key],0)/fs.length : null;
+      return `<button class="stile" data-fcat="${esc(c)}" style="${UI.fcat===c?"outline:2px solid var(--accent)":""};background:${heat(avg)}"><span class="sn">${esc(c)}</span><span class="sv ${avg>=0?"pos":"neg"}">${avg==null?"–":pct(avg)}</span><span class="sc">${fs.length} fund${fs.length===1?"":"s"} · avg ${UI.tp}</span></button>`; }).join("")}</div>` : ""}
     <h2>${rows.length ? `Best ${UI.tp} returns first` : "No data yet"}</h2>
     <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Name</th><th class="n">${fund?"NAV":"Price"}</th>
       ${periods.map(p=>`<th class="n" data-tsort="${p[1]}" ${p[1]===sortKey?'aria-sort="descending"':""}>${p[0]}${p[1]===sortKey?(UI.tdir<0?" ↓":" ↑"):""}</th>`).join("")}
       ${fund ? "<th></th>" : "<th>60 days</th>"}</tr></thead><tbody>
       ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td>
-        <td>${esc(r.name)}<small>${esc(fund ? r.category + " · " + r.house : (r.ticker + " · " + r.market))}</small></td>
+        <td><button class="linkish" ${fund ? `data-fundchart="${esc(r.code)}"` : `data-chart="${esc(r.ticker)}"`}>${esc(r.name)}</button><small>${esc(fund ? r.category + " · " + r.house : (r.ticker + " · " + r.market))}</small></td>
         <td class="n">${fund ? r.nav.toFixed(2) : fmt(r.last)}${fund?"":`<small>${r.currency==="INR"?"₹":"$"}</small>`}</td>
         ${periods.map(p=>cell(r[p[1]])).join("")}
         ${fund ? `<td><button class="btn" data-planfund="${esc(r.code)}">Plan with this fund</button></td>` : `<td>${spark(r.spark,90,26)}</td>`}</tr>`).join("")}
@@ -408,6 +423,15 @@ function renderTop(){
 }
 
 
+function sectorMap(rows, col){
+  const g = {};
+  rows.forEach(r => { const k = r[10] || "Unclassified"; (g[k] = g[k] || []).push(r); });
+  const list = Object.entries(g).map(([k, rs]) => { const v = rs.map(r=>r[col]).filter(x=>x!=null).sort((a,b)=>a-b);
+    const med = v.length ? v[Math.floor(v.length/2)] : null, best = rs.slice().sort((a,b)=>(b[col]??-1e9)-(a[col]??-1e9))[0];
+    return {k, n: rs.length, med, best}; }).sort((a,b) => (b.med??-1e9) - (a.med??-1e9));
+  return `<h2>Sector map · median ${esc(UI.up)} return</h2><p class="note">Each tile is a sector, coloured by the median return of its companies. Tap a sector to list its stocks.</p>
+    <div class="smap">${list.map(x=>`<button class="stile" data-sector="${esc(x.k)}" style="background:${heat(x.med)}"><span class="sn">${esc(x.k)}</span><span class="sv ${x.med>=0?"pos":"neg"}">${x.med==null?"–":pct(x.med)}</span><span class="sc">${x.n.toLocaleString()} stocks · best: ${esc((x.best&&x.best[1]||"").slice(0,22))}</span></button>`).join("")}</div>`;
+}
 async function loadUniverse(){
   if (UNIV || univLoading) return; univLoading = true;
   try{ UNIV = await getJSON("data/universe.json"); }catch(e){ UNIV = {rows:[], cols:[], count:0, missing:true}; }
@@ -425,6 +449,10 @@ function renderUniverse(){
   else if (UI.ux === "US") rows = rows.filter(r => r[2]!=="NSE" && r[2]!=="BSE");
   else if (UI.ux) rows = rows.filter(r => r[2] === UI.ux);
   if (q) rows = rows.filter(r => r[0].toLowerCase().includes(q) || r[1].toLowerCase().includes(q));
+  const sectors = [...new Set(rows.map(r => r[10]).filter(Boolean))].sort(), sizes = ["Mega cap","Large cap","Mid cap","Small cap","Micro cap"].filter(z => rows.some(r => r[11]===z));
+  if (UI.usz) rows = rows.filter(r => r[11] === UI.usz);
+  const base = rows;
+  if (UI.usec) rows = rows.filter(r => (r[10]||"Unclassified") === UI.usec);
   rows.sort((a,b) => (b[col]-a[col]) * (UI.udir < 0 ? 1 : -1));
   const cur = r => (r[2]==="NSE"||r[2]==="BSE") ? "₹" : "$";
   const cell = v => v == null ? `<td class="n">–</td>` : `<td class="n ${v>=0?"pos":"neg"}">${pct(v)}</td>`;
@@ -432,21 +460,92 @@ function renderUniverse(){
     <p class="sub" style="margin-top:12px">${UNIV.count.toLocaleString()} listed stocks · ${Object.entries(ex).map(([k,v])=>`${esc(k)} ${v.toLocaleString()}`).join(" · ")}. Closing prices, refreshed after each market close (last ${ago(UNIV.updated)}).</p>
     <div class="filters">
       <div class="field"><label for="uq">Find a company</label><input type="search" id="uq" placeholder="Name or symbol, e.g. Tata, INFY, Apple" value="${esc(UI.uq)}"></div>
+      <div class="field"><label for="usec">Sector</label><select id="usec"><option value="">All sectors</option>${sectors.map(x=>`<option ${UI.usec===x?"selected":""}>${esc(x)}</option>`).join("")}${base.some(r=>!r[10])?`<option ${UI.usec==="Unclassified"?"selected":""}>Unclassified</option>`:""}</select></div>
+      <div class="field"><label for="usz">Company size</label><select id="usz"><option value="">All sizes</option>${sizes.map(x=>`<option ${UI.usz===x?"selected":""}>${esc(x)}</option>`).join("")}</select></div>
       <div class="field"><label for="ux">Exchange</label><select id="ux"><option value="">All exchanges</option><option value="India" ${UI.ux==="India"?"selected":""}>India (NSE + BSE)</option><option value="US" ${UI.ux==="US"?"selected":""}>US (all)</option>${Object.keys(ex).map(k=>`<option ${UI.ux===k?"selected":""}>${esc(k)}</option>`).join("")}</select></div>
     </div>
     <div class="filters2">
       <span class="lbl">Rank by</span><span class="seg" data-seg="up">${P.map(p=>`<button aria-pressed="${UI.up===p[0]}">${p[0]}</button>`).join("")}</span>
       <span class="seg" data-seg="uord"><button aria-pressed="${UI.udir<0}">Top gainers</button><button aria-pressed="${UI.udir>0}">Top losers</button></span>
     </div>
+    <div class="filters2"><span class="lbl">View</span><span class="seg" data-seg="uv">${["List","Sector map"].map(x=>`<button aria-pressed="${UI.uv===x}">${x}</button>`).join("")}</span>
+      ${UI.usec ? `<button class="btn" data-clearsec>Clear sector: ${esc(UI.usec)} ✕</button>` : ""}</div>
+    ${UI.uv === "Sector map" ? sectorMap(base, col) : `
     <h2>${rows.length.toLocaleString()} ${rows.length===1?"stock":"stocks"}</h2>
     <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th>${P.map(p=>`<th class="n">${p[0]}${p[1]===col?(UI.udir<0?" ↓":" ↑"):""}</th>`).join("")}</tr></thead><tbody>
-      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td>${esc(r[1])}<small>${esc(r[0])} · ${esc(r[2])}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}</tr>`).join("")}
+      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r[0])}">${esc(r[1])}</button><small>${esc([r[0], r[2], r[10], r[11]].filter(Boolean).join(" · "))}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}</tr>`).join("")}
     </tbody></table></div>
-    ${rows.length > UI.ulim ? `<button class="btn more" id="umore">Show more (${(rows.length-UI.ulim).toLocaleString()} left)</button>` : ""}
+    ${rows.length > UI.ulim ? `<button class="btn more" id="umore">Show more (${(rows.length-UI.ulim).toLocaleString()} left)</button>` : ""}`}
     <p class="disc">For education only. Very small or rarely traded stocks can show extreme percentage moves. Past returns don't predict future returns; this is not a recommendation to buy or sell.</p>`;
   const u = $("#uq"); u.oninput = () => { UI.uq = u.value; UI.ulim = 50; const pos = u.selectionStart; renderUniverse(); const n = $("#uq"); n.focus(); n.setSelectionRange(pos,pos); };
-  $("#ux").onchange = e => { UI.ux = e.target.value; UI.ulim = 50; renderUniverse(); };
+  $("#ux").onchange = e => { UI.ux = e.target.value; UI.ulim = 50; UI.usec = ""; renderUniverse(); };
+  $("#usec").onchange = e => { UI.usec = e.target.value; UI.ulim = 50; if (UI.usec) UI.uv = "List"; renderUniverse(); };
+  $("#usz").onchange = e => { UI.usz = e.target.value; UI.ulim = 50; renderUniverse(); };
   if ($("#umore")) $("#umore").onclick = () => { UI.ulim += 50; renderUniverse(); };
+}
+
+
+/* ================= CHARTS (stocks & funds) ================= */
+const SHARDS = {};
+const shardOf = t => [...t].reduce((a,c)=>a+c.charCodeAt(0),0) % ((UNIV && UNIV.shards) || 32);
+function lineChart(pts, W=640, H=220){
+  if (!pts || pts.length < 2) return `<p class="note">No price history available.</p>`;
+  const pad = 46, ys = pts.map(p=>p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys), yr = (y1-y0)||1;
+  const X = i => pad + i/(pts.length-1)*(W-pad-10), Y = v => 12 + (1-(v-y0)/yr)*(H-40);
+  const up = ys[ys.length-1] >= ys[0], line = pts.map((p,i)=>X(i).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ");
+  const ticks = [0, Math.floor((pts.length-1)/2), pts.length-1];
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Price history">
+    ${[y1,(y0+y1)/2,y0].map(v=>`<line x1="${pad}" x2="${W-10}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="2" y="${Y(v)+4}" font-size="10" fill="var(--muted)" font-family="var(--f-mono)">${fmt(v)}</text>`).join("")}
+    <polygon points="${X(0)},${H-28} ${line} ${X(pts.length-1)},${H-28}" fill="var(${up?"--up-soft":"--down-soft"})"/>
+    <polyline points="${line}" fill="none" stroke="var(${up?"--up":"--down"})" stroke-width="2"/>
+    ${ticks.map(i=>`<text x="${Math.min(Math.max(X(i),pad),W-60)}" y="${H-8}" font-size="10" fill="var(--muted)">${esc(pts[i][0])}</text>`).join("")}
+  </svg>`;
+}
+function drawer(html){
+  $("#readerHost").innerHTML = `<div class="scrim" data-close></div><aside class="reader" role="dialog" aria-modal="true"><div class="rtop"><button class="btn" data-close>← Back</button></div>${html}</aside>`;
+  document.body.style.overflow = "hidden";
+}
+function uniRow(t){ return UNIV ? UNIV.rows.find(r => r[0] === t) : null; }
+async function openChart(t){
+  const r = uniRow(t), p = PERF && [...PERF.stocks, ...PERF.etfs, ...PERF.commodities].find(x => x.ticker === t);
+  const name = r ? r[1] : (p ? p.name : t), cur = (r ? (r[2]==="NSE"||r[2]==="BSE") : t.endsWith(".NS")) ? "₹" : "$";
+  const stats = r ? {p:r[3], d1:r[4], w1:r[5], m1:r[6], m6:r[7], y1:r[8]} : p ? {p:p.last, d1:p.d1, w1:p.w1, m1:p.m1, m6:p.m6, y1:p.y1} : null;
+  const tags = r ? [r[2], r[10], r[11], r[12], r[13]].filter(Boolean) : (p ? [p.market] : []);
+  drawer(`<h1 style="font-size:28px">${esc(name)}</h1><div class="meta">${esc(t)}</div>
+    <div class="chips" style="margin-top:8px">${tags.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div>
+    ${stats ? `<div class="kv"><div><b>Price</b><span class="num">${cur}${fmt(stats.p)}</span></div>${[["1D","d1"],["1W","w1"],["1M","m1"],["6M","m6"],["1Y","y1"]].map(([l,k])=>`<div><b>${l}</b><span class="num ${stats[k]>=0?"pos":"neg"}">${stats[k]==null?"–":pct(stats[k])}</span></div>`).join("")}</div>` : ""}
+    <span class="seg" id="crange">${["1M","3M","6M","1Y"].map(x=>`<button type="button" aria-pressed="${x==="1Y"}">${x}</button>`).join("")}</span>
+    <div id="cbox" style="margin-top:10px"><p class="note">Loading chart…</p></div>
+    <p class="disc">Daily closing prices from Yahoo Finance. For education only; past performance doesn't predict future returns.</p>`);
+  let series = null;
+  try{
+    const k = shardOf(t);
+    if (!SHARDS[k]) SHARDS[k] = await getJSON(`data/charts/${k}.json`);
+    series = SHARDS[k][t];
+  }catch(e){}
+  const draw = range => {
+    if (!series){ $("#cbox").innerHTML = `<p class="note">The chart appears after the next full stock update (twice a day).</p>`; return; }
+    const [d0, d1, vals] = series, start = new Date(d0), end = new Date(d1), n = vals.length;
+    const pts = vals.map((v,i) => [new Date(start.getTime() + (end-start)*i/Math.max(1,n-1)).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"2-digit"}), v]);
+    const keep = {"1M":22,"3M":63,"6M":126,"1Y":n}[range];
+    $("#cbox").innerHTML = lineChart(pts.slice(-keep));
+  };
+  draw("1Y");
+  $("#crange").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("#crange").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed", x===b)); draw(b.textContent); };
+}
+function openFundChart(code){
+  const f = FUNDS && FUNDS.funds.find(x => String(x.code) === String(code)); if (!f) return;
+  drawer(`<h1 style="font-size:26px">${esc(f.name)}</h1><div class="meta">${esc(f.house)} · NAV ₹${f.nav.toFixed(2)} on ${esc(f.nav_date)}</div>
+    <div class="chips" style="margin-top:8px"><span class="chip">${esc(f.category)}</span><span class="chip">Direct · Growth</span></div>
+    <div class="kv">${[["1M","m1"],["6M","m6"],["1Y","y1"],["3Y a year","y3"],["5Y a year","y5"]].map(([l,k])=>`<div><b>${l}</b><span class="num ${f[k]>=0?"pos":"neg"}">${f[k]==null?"–":pct(f[k])}</span></div>`).join("")}</div>
+    <span class="seg" id="frange">${["1Y","3Y","5Y"].map(x=>`<button type="button" aria-pressed="${x==="3Y"}">${x}</button>`).join("")}</span>
+    <div id="fbox" style="margin-top:10px"></div>
+    <div class="rbtns"><button class="btn primary" data-planfund="${esc(f.code)}">Plan an SIP with this fund</button></div>
+    <p class="disc">Weekly NAVs from AMFI (via mfapi.in). For education only; past returns don't guarantee future returns.</p>`);
+  const draw = r => { const n = {"1Y":53,"3Y":157,"5Y":9999}[r]; const h = (f.hist||[]).slice(-n);
+    $("#fbox").innerHTML = lineChart(h.map(([d,v]) => [new Date(d).toLocaleDateString(undefined,{month:"short",year:"2-digit"}), v])); };
+  draw("3Y");
+  $("#frange").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("#frange").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed", x===b)); draw(b.textContent); };
 }
 
 /* ================= INVESTMENT PLANNER ================= */
@@ -724,11 +823,16 @@ SUMMARY: ${a.summary||"(none)"}`;
 
 /* ================= global clicks ================= */
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-planfund],[data-tsort],[data-open],[data-track],[data-readtoggle],[data-close],[data-status],[data-seen],[data-untopic],.seg button");
+  const t = e.target.closest("[data-chart],[data-fundchart],[data-sector],[data-fcat],[data-clearsec],[data-planfund],[data-tsort],[data-open],[data-track],[data-readtoggle],[data-close],[data-status],[data-seen],[data-untopic],.seg button");
   if (!t) return;
   if (t.dataset.open){ e.preventDefault(); openStory(t.dataset.open); return; }
   if (t.dataset.close !== undefined){ closeReader(t.tagName !== "A"); return; }
-  if (t.dataset.planfund){ const f = FUNDS.funds.find(x => String(x.code) === t.dataset.planfund); UI.fundSel = String(f.code); UI.rate = +((f.y3 != null ? f.y3 : f.y1).toFixed(1)); UI.pm = "SIP"; location.hash = "#planner"; return; }
+  if (t.dataset.chart){ openChart(t.dataset.chart); return; }
+  if (t.dataset.fundchart){ openFundChart(t.dataset.fundchart); return; }
+  if (t.dataset.sector !== undefined){ UI.usec = t.dataset.sector; UI.uv = "List"; UI.ulim = 50; renderUniverse(); window.scrollTo({top:0}); return; }
+  if (t.dataset.fcat !== undefined){ UI.fcat = UI.fcat === t.dataset.fcat ? "" : t.dataset.fcat; renderTop(); return; }
+  if (t.dataset.clearsec !== undefined){ UI.usec = ""; renderUniverse(); return; }
+  if (t.dataset.planfund){ closeReader(false); const f = FUNDS.funds.find(x => String(x.code) === t.dataset.planfund); UI.fundSel = String(f.code); UI.rate = +((f.y3 != null ? f.y3 : f.y1).toFixed(1)); UI.pm = "SIP"; location.hash = "#planner"; return; }
   if (t.dataset.tsort){ if (UI.tsort === t.dataset.tsort) UI.tdir *= -1; else { UI.tsort = t.dataset.tsort; UI.tdir = -1; } renderTop(); return; }
   if (t.dataset.track){ const id = t.dataset.track;
     if (ME.tracked[id]) delete ME.tracked[id];

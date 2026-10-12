@@ -706,7 +706,18 @@ def _mf_returns(rows: list[dict]) -> dict | None:
         return (last_v / v - 1) * 100 if v else None
     res = {"nav": last_v, "nav_date": last_d.strftime("%Y-%m-%d"), "m1": simple(30), "m6": simple(182), "y1": simple(365),
            "y3": cagr(365 * 3, 3), "y5": cagr(365 * 5, 5)}
-    return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in res.items()}
+    res = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in res.items()}
+    # weekly NAVs for the last 5 years (for the chart)
+    start = last_d - timedelta(days=365 * 5)
+    hist, nxt = [], start
+    for d, v in pts:
+        if d >= nxt:
+            hist.append([d.strftime("%Y-%m-%d"), round(v, 3)])
+            nxt = d + timedelta(days=7)
+    if hist and hist[-1][0] != res["nav_date"]:
+        hist.append([res["nav_date"], round(last_v, 3)])
+    res["hist"] = hist
+    return res
 
 
 def _pick_scheme(hits: list[dict], label: str, must: list[str]) -> dict | None:
@@ -729,7 +740,7 @@ def _pick_scheme(hits: list[dict], label: str, must: list[str]) -> dict | None:
     return min(ok, key=lambda h: len(h["schemeName"])) if ok else None
 
 
-FUNDS_VERSION = 3
+FUNDS_VERSION = 4
 
 
 def build_funds(get=_mf_get) -> dict | None:

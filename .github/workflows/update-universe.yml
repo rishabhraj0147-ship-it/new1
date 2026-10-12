@@ -25,6 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get the previous list
+        run: |
+          mkdir -p data
+          if git fetch --depth 1 origin data-universe 2>/dev/null; then git --work-tree=. checkout FETCH_HEAD -- data && git reset -q data; fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -35,17 +40,16 @@ jobs:
       - name: Fetch all listed stocks
         run: python scripts/update_universe.py
 
-      - name: Save to repository
+      - name: Save (latest copy only, on the data-universe branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "worldpulse-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/universe.json || true
-          if git diff --cached --quiet; then
-            echo "Nothing changed"
-            exit 0
-          fi
-          git commit -m "Update all listed stocks $(date -u +'%Y-%m-%d %H:%M UTC')"
-          for i in 1 2 3; do
-            git pull --rebase --autostash && git push && break
-            sleep 10
-          done
+          test -f data/universe.json || { echo "No universe.json produced"; exit 0; }
+          rm -rf /tmp/pub && mkdir -p /tmp/pub/data
+          cp data/universe.json /tmp/pub/data/
+          cp -r data/charts /tmp/pub/data/ 2>/dev/null || true
+          cd /tmp/pub
+          git init -q -b data-universe
+          git add -A
+          git -c user.name="worldpulse-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "All listed stocks $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:data-universe

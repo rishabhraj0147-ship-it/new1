@@ -18,7 +18,9 @@ A GitHub Action runs `scripts/update_data.py` every 15 minutes. The script fetch
 | `scripts/update_data.py` | Fetches news and prices. Sources, markets and keyword rules are at the top. |
 | `.github/workflows/update-data.yml` | Runs the updater every 15 minutes and publishes the site |
 | `requirements.txt` | Python packages for the updater |
-| `data/` | Created automatically on the first run |
+| `scripts/update_universe.py` | Builds the list of every listed stock (NSE, BSE, NYSE, NASDAQ, NYSE American) with sector, size and price history |
+| `.github/workflows/update-universe.yml` | Runs the full-stock update twice every weekday |
+| `data` / `data-universe` branches | The latest data only (no history), written by the workflows and published with the site |
 
 ## One-time setup
 1. The repository must be **Public**.

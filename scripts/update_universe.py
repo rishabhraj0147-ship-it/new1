@@ -108,6 +108,62 @@ def us_list() -> list[dict]:
     return clean
 
 
+# ----------------------------------------------------------------------------- sector, size, country
+NSE_INDEX = "https://nsearchives.nseindia.com/content/indices/"
+NSE_SIZE_LISTS = [("ind_nifty100list.csv", "Large cap"), ("ind_niftymidcap150list.csv", "Mid cap"),
+                  ("ind_niftysmallcap250list.csv", "Small cap"), ("ind_niftymicrocap250_list.csv", "Micro cap")]
+
+
+def _nse_csv(name):
+    rows = list(csv.DictReader(io.StringIO(_get(NSE_INDEX + name, headers={"Referer": "https://www.nseindia.com/"}).text)))
+    return [{k.strip(): (v or "").strip() for k, v in r.items()} for r in rows]
+
+
+def india_meta() -> dict:
+    """symbol.NS -> {sector, size}. Size follows SEBI's ranks: top 100 large, next 150 mid, next 250 small."""
+    meta = {}
+    for name, size in NSE_SIZE_LISTS + [("ind_niftytotalmarket_list.csv", None)]:
+        try:
+            for r in _nse_csv(name):
+                t = r.get("Symbol", "") + ".NS"
+                m = meta.setdefault(t, {})
+                if r.get("Industry"):
+                    m["sector"] = r["Industry"]
+                if size and "size" not in m:
+                    m["size"] = size
+        except Exception as exc:
+            print(f"  NSE index list failed ({name}): {exc}", file=sys.stderr)
+    return meta
+
+
+def _cap_bucket(cap: float) -> str:
+    if cap >= 200e9: return "Mega cap"
+    if cap >= 10e9: return "Large cap"
+    if cap >= 2e9: return "Mid cap"
+    if cap >= 300e6: return "Small cap"
+    return "Micro cap"
+
+
+def us_meta() -> dict:
+    """ticker -> {sector, industry, size, country} from the Nasdaq stock screener (covers NYSE, NASDAQ, AMEX)."""
+    meta = {}
+    try:
+        j = _get("https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=25&offset=0&download=true",
+                 headers={"Accept": "application/json, text/plain, */*", "Origin": "https://www.nasdaq.com",
+                          "Referer": "https://www.nasdaq.com/"}).json()
+        for r in (j.get("data") or {}).get("rows") or []:
+            t = (r.get("symbol") or "").strip().replace("/", "-").replace(".", "-")
+            try:
+                cap = float(str(r.get("marketCap") or "0").replace(",", "") or 0)
+            except ValueError:
+                cap = 0
+            meta[t] = {"sector": (r.get("sector") or "").strip(), "industry": (r.get("industry") or "").strip(),
+                       "country": (r.get("country") or "").strip(), "size": _cap_bucket(cap) if cap else ""}
+    except Exception as exc:
+        print(f"  US screener failed: {exc}", file=sys.stderr)
+    return meta
+
+
 # ----------------------------------------------------------------------------- prices
 def _download(tickers):
     import yfinance as yf
@@ -134,8 +190,23 @@ def perf(s):
             "y1": r(float(s.iloc[0])) if len(s) > 200 else None, "as_of": s.index[-1].strftime("%Y-%m-%d")}
 
 
-def build(listings: list[dict], download=_download, pause=1.0) -> list[list]:
+N_SHARDS = 32
+
+
+def shard_of(ticker: str) -> int:
+    """Same rule as index.html: sum of character codes, modulo 32."""
+    return sum(ord(c) for c in ticker) % N_SHARDS
+
+
+def _series(s) -> list:
+    s = s.dropna()
+    vals = [round(float(v), 2) if abs(v) >= 1 else round(float(v), 4) for v in s.tolist()]
+    return [s.index[0].strftime("%Y-%m-%d"), s.index[-1].strftime("%Y-%m-%d"), vals]
+
+
+def build(listings: list[dict], download=_download, pause=1.0, meta=None, shards=None) -> list[list]:
     rows, ok = [], 0
+    meta = meta or {}
     for i in range(0, len(listings), CHUNK):
         chunk = listings[i:i + CHUNK]
         try:
@@ -148,7 +219,12 @@ def build(listings: list[dict], download=_download, pause=1.0) -> list[list]:
                 if x["t"] in df.columns:
                     p = perf(df[x["t"]])
                     if p:
-                        rows.append([x["t"], x["n"][:70], x["x"], p["p"], p["d1"], p["w1"], p["m1"], p["m6"], p["y1"], p["as_of"]])
+                        m = meta.get(x["t"], {})
+                        rows.append([x["t"], x["n"][:70], x["x"], p["p"], p["d1"], p["w1"], p["m1"], p["m6"], p["y1"], p["as_of"],
+                                     m.get("sector") or "", m.get("size") or "", m.get("country") or ("India" if x["x"] in ("NSE", "BSE") else ""),
+                                     m.get("industry") or ""])
+                        if shards is not None:
+                            shards.setdefault(shard_of(x["t"]), {})[x["t"]] = _series(df[x["t"]])
                         ok += 1
         if (i // CHUNK) % 10 == 0:
             print(f"  {i + len(chunk)}/{len(listings)} checked, {ok} with prices")
@@ -167,7 +243,11 @@ def main():
     if not listings:
         print("No lists could be downloaded – keeping the previous universe.json", file=sys.stderr)
         return
-    rows = build(listings)
+    print("Sector / size data…")
+    meta = {**india_meta(), **us_meta()}
+    print(f"  {len(meta)} companies with sector or size")
+    shards = {}
+    rows = build(listings, meta=meta, shards=shards)
     if len(rows) < 100:
         print("Too few prices – keeping the previous universe.json", file=sys.stderr)
         return
@@ -175,12 +255,18 @@ def main():
     for r in rows:
         counts[r[2]] = counts.get(r[2], 0) + 1
     data = {"updated": datetime.now(timezone.utc).isoformat(), "count": len(rows), "by_exchange": counts,
-            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of"], "rows": rows}
+            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of", "sector", "size", "country", "industry"],
+            "shards": N_SHARDS, "rows": rows}
     tmp = os.path.join(OUT_DIR, "universe.json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, os.path.join(OUT_DIR, "universe.json"))
-    print(f"Saved {len(rows)} stocks: {counts}")
+    cdir = os.path.join(OUT_DIR, "charts")
+    os.makedirs(cdir, exist_ok=True)
+    for k, v in shards.items():
+        with open(os.path.join(cdir, f"{k}.json"), "w", encoding="utf-8") as f:
+            json.dump(v, f, separators=(",", ":"))
+    print(f"Saved {len(rows)} stocks: {counts}; {sum(1 for r in rows if r[10])} with sector")
 
 
 if __name__ == "__main__":

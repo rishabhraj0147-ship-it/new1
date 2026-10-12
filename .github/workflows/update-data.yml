@@ -12,7 +12,7 @@ on:
     paths-ignore: ["data/**"]
 
 permissions:
-  contents: write     # to save data/news.json and data/prices.json
+  contents: write     # to save the latest data on the "data" branch
   pages: write        # to publish the site
   id-token: write
 
@@ -30,6 +30,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Data lives on two side branches that keep only the latest copy (so the repository never balloons):
+      #   data           – news, prices, top performers, funds (this workflow)
+      #   data-universe  – all listed stocks + their charts   (update-universe.yml)
+      - name: Get the latest data
+        run: |
+          mkdir -p data
+          for b in data data-universe; do
+            if git fetch --depth 1 origin "$b" 2>/dev/null; then git --work-tree=. checkout FETCH_HEAD -- data && git reset -q data; fi
+          done
+          ls -la data || true
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -43,18 +54,18 @@ jobs:
           # Optional: add a repository secret named ANTHROPIC_API_KEY and Claude writes the crux + impact
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Save data to the repository
+      - name: Save data (latest copy only)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "worldpulse-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "Nothing changed"
-          else
-            git commit -m "Update news and prices $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git pull --rebase --autostash
-            git push
-          fi
+          rm -rf /tmp/pub && mkdir -p /tmp/pub/data
+          cp data/news.json data/prices.json /tmp/pub/data/ 2>/dev/null || true
+          cp data/performers.json data/funds.json /tmp/pub/data/ 2>/dev/null || true
+          cd /tmp/pub
+          git init -q -b data
+          git add -A
+          git -c user.name="worldpulse-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "Latest news and prices $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:data
 
       - uses: actions/configure-pages@v5
 
