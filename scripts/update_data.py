@@ -548,6 +548,182 @@ def fetch_prices(history=_history) -> dict:
 
 
 
+
+# =============================================================================
+# TOP PERFORMERS: stocks, ETFs, commodities (Yahoo Finance) and Indian mutual funds (mfapi.in)
+# =============================================================================
+STOCKS = {
+    "India": {
+        "RELIANCE.NS": "Reliance Industries", "TCS.NS": "TCS", "HDFCBANK.NS": "HDFC Bank", "ICICIBANK.NS": "ICICI Bank",
+        "INFY.NS": "Infosys", "BHARTIARTL.NS": "Bharti Airtel", "SBIN.NS": "State Bank of India", "ITC.NS": "ITC",
+        "LT.NS": "Larsen & Toubro", "HINDUNILVR.NS": "Hindustan Unilever", "KOTAKBANK.NS": "Kotak Mahindra Bank",
+        "AXISBANK.NS": "Axis Bank", "BAJFINANCE.NS": "Bajaj Finance", "MARUTI.NS": "Maruti Suzuki", "SUNPHARMA.NS": "Sun Pharma",
+        "HCLTECH.NS": "HCL Technologies", "M&M.NS": "Mahindra & Mahindra", "TITAN.NS": "Titan", "ULTRACEMCO.NS": "UltraTech Cement",
+        "NTPC.NS": "NTPC", "POWERGRID.NS": "Power Grid", "ONGC.NS": "ONGC", "ADANIENT.NS": "Adani Enterprises",
+        "ADANIPORTS.NS": "Adani Ports", "ASIANPAINT.NS": "Asian Paints", "WIPRO.NS": "Wipro", "NESTLEIND.NS": "Nestle India",
+        "TATASTEEL.NS": "Tata Steel", "JSWSTEEL.NS": "JSW Steel", "COALINDIA.NS": "Coal India", "BAJAJFINSV.NS": "Bajaj Finserv",
+        "TECHM.NS": "Tech Mahindra", "HINDALCO.NS": "Hindalco", "GRASIM.NS": "Grasim", "CIPLA.NS": "Cipla",
+        "DRREDDY.NS": "Dr Reddy's", "EICHERMOT.NS": "Eicher Motors", "HEROMOTOCO.NS": "Hero MotoCorp", "BRITANNIA.NS": "Britannia",
+        "APOLLOHOSP.NS": "Apollo Hospitals", "INDUSINDBK.NS": "IndusInd Bank", "TRENT.NS": "Trent", "BEL.NS": "Bharat Electronics",
+        "HAL.NS": "Hindustan Aeronautics", "ETERNAL.NS": "Eternal (Zomato)", "JIOFIN.NS": "Jio Financial", "DMART.NS": "Avenue Supermarts (DMart)",
+        "IRCTC.NS": "IRCTC", "TATAPOWER.NS": "Tata Power", "VEDL.NS": "Vedanta",
+    },
+    "US": {
+        "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia", "AMZN": "Amazon", "GOOGL": "Alphabet (Google)", "META": "Meta",
+        "TSLA": "Tesla", "AVGO": "Broadcom", "BRK-B": "Berkshire Hathaway", "JPM": "JPMorgan Chase", "V": "Visa",
+        "MA": "Mastercard", "LLY": "Eli Lilly", "UNH": "UnitedHealth", "XOM": "Exxon Mobil", "WMT": "Walmart", "COST": "Costco",
+        "NFLX": "Netflix", "AMD": "AMD", "ORCL": "Oracle", "CRM": "Salesforce", "ADBE": "Adobe", "KO": "Coca-Cola",
+        "PEP": "PepsiCo", "DIS": "Disney", "BAC": "Bank of America", "INTC": "Intel", "PLTR": "Palantir",
+    },
+    "Global": {
+        "TSM": "TSMC (Taiwan)", "ASML": "ASML (Netherlands)", "NVO": "Novo Nordisk (Denmark)", "SAP": "SAP (Germany)",
+        "TM": "Toyota (Japan)", "BABA": "Alibaba (China)", "SHEL": "Shell (UK)", "HSBC": "HSBC (UK)", "SONY": "Sony (Japan)",
+    },
+}
+ETFS = {
+    "NIFTYBEES.NS": ("Nippon India Nifty 50 BeES", "India"), "JUNIORBEES.NS": ("Nippon India Nifty Next 50 BeES", "India"),
+    "BANKBEES.NS": ("Nippon India Bank BeES", "India"), "ITBEES.NS": ("Nippon India IT BeES", "India"),
+    "GOLDBEES.NS": ("Nippon India Gold BeES", "India"), "SILVERBEES.NS": ("Nippon India Silver BeES", "India"),
+    "MON100.NS": ("Motilal Oswal Nasdaq 100 ETF", "India"), "CPSEETF.NS": ("CPSE ETF", "India"),
+    "SPY": ("SPDR S&P 500", "US"), "QQQ": ("Invesco Nasdaq 100", "US"), "VTI": ("Vanguard Total US Market", "US"),
+    "VEA": ("Vanguard Developed Markets", "US"), "EEM": ("iShares Emerging Markets", "US"), "INDA": ("iShares MSCI India", "US"),
+    "GLD": ("SPDR Gold", "US"), "SLV": ("iShares Silver", "US"), "TLT": ("iShares 20+ Yr Treasury", "US"),
+    "XLE": ("Energy Select Sector", "US"), "XLF": ("Financial Select Sector", "US"), "SMH": ("VanEck Semiconductors", "US"),
+}
+COMMODITIES = {
+    "GC=F": "Gold", "SI=F": "Silver", "PL=F": "Platinum", "HG=F": "Copper", "ALI=F": "Aluminium",
+    "BZ=F": "Brent crude", "CL=F": "WTI crude", "NG=F": "Natural gas", "ZW=F": "Wheat", "ZC=F": "Corn",
+    "ZS=F": "Soybeans", "KC=F": "Coffee", "SB=F": "Sugar", "CC=F": "Cocoa", "CT=F": "Cotton",
+}
+# Popular Indian mutual funds (Direct, Growth). Searched by name on mfapi.in once a day.
+MUTUAL_FUNDS = [
+    ("Parag Parikh Flexi Cap", "Flexi cap"), ("HDFC Flexi Cap", "Flexi cap"), ("Kotak Flexicap", "Flexi cap"),
+    ("ICICI Prudential Large Cap", "Large cap"), ("Nippon India Large Cap", "Large cap"), ("SBI Bluechip", "Large cap"),
+    ("Motilal Oswal Midcap", "Mid cap"), ("HDFC Mid Cap", "Mid cap"), ("Kotak Midcap", "Mid cap"),
+    ("Nippon India Small Cap", "Small cap"), ("SBI Small Cap", "Small cap"), ("Quant Small Cap", "Small cap"),
+    ("Axis Small Cap", "Small cap"), ("UTI Nifty 50 Index", "Index"), ("Navi Nifty 50 Index", "Index"),
+    ("Mirae Asset ELSS Tax Saver", "ELSS (tax saver)"), ("Quant ELSS Tax Saver", "ELSS (tax saver)"),
+    ("ICICI Prudential Equity & Debt", "Hybrid"), ("HDFC Balanced Advantage", "Hybrid"),
+    ("ICICI Prudential Technology", "Sectoral"), ("SBI Healthcare Opportunities", "Sectoral"),
+    ("Motilal Oswal Nasdaq 100 Fund of Fund", "International"), ("SBI Gold", "Gold"),
+    ("HDFC Corporate Bond", "Debt"), ("ICICI Prudential Liquid", "Debt"),
+]
+MF_REFRESH_HOURS = 12
+
+
+def _closes(tickers: list[str]):
+    """Daily closes for the last year, one column per ticker."""
+    import yfinance as yf
+    df = yf.download(tickers, period="1y", interval="1d", auto_adjust=True, progress=False, threads=True, group_by="column")
+    if df is None or df.empty:
+        return None
+    c = df["Close"] if "Close" in df.columns.get_level_values(0) else df
+    if not hasattr(c, "columns"):
+        c = c.to_frame(tickers[0])
+    return c
+
+
+def _perf(series) -> dict | None:
+    s = series.dropna()
+    if len(s) < 5:
+        return None
+    last = float(s.iloc[-1])
+    def back(n):
+        return float(s.iloc[-1 - n]) if len(s) > n else float(s.iloc[0])
+    return {"last": last, "d1": (last / back(1) - 1) * 100, "w1": (last / back(5) - 1) * 100,
+            "m1": (last / back(21) - 1) * 100, "m6": (last / back(126) - 1) * 100, "y1": (last / float(s.iloc[0]) - 1) * 100,
+            "as_of": s.index[-1].strftime("%Y-%m-%d"), "spark": [round(float(x), 4) for x in s.iloc[-60::3]]}
+
+
+def build_performers(closes=_closes) -> dict:
+    groups = []
+    for market, book in STOCKS.items():
+        groups.append(("stocks", market, {t: (n, market) for t, n in book.items()}))
+    groups.append(("etfs", "ETF", ETFS))
+    groups.append(("commodities", "Commodity", {t: (n, "Global") for t, n in COMMODITIES.items()}))
+    out = {"stocks": [], "etfs": [], "commodities": []}
+    for kind, _, book in groups:
+        try:
+            df = closes(list(book))
+        except Exception as exc:
+            print(f"  performers failed for {kind}: {exc}", file=sys.stderr)
+            continue
+        if df is None:
+            continue
+        for t, (name, market) in book.items():
+            if t not in df.columns:
+                continue
+            p = _perf(df[t])
+            if p:
+                out[kind].append({"ticker": t, "name": name, "market": market,
+                                  "currency": "INR" if t.endswith(".NS") else "USD", **{k: (round(v, 3) if isinstance(v, float) else v) for k, v in p.items()}})
+    return out
+
+
+def _mf_get(url):
+    r = requests.get(url, headers={"User-Agent": UA}, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+
+def _mf_returns(rows: list[dict]) -> dict | None:
+    pts = []
+    for r in rows:
+        try:
+            d, m, y = r["date"].split("-")
+            pts.append((datetime(int(y), int(m), int(d)), float(r["nav"])))
+        except Exception:
+            continue
+    if len(pts) < 30:
+        return None
+    pts.sort()
+    last_d, last_v = pts[-1]
+    def at(days):
+        target = last_d - timedelta(days=days)
+        older = [v for d, v in pts if d <= target]
+        return older[-1] if older else None
+    def cagr(days, years):
+        v = at(days)
+        return ((last_v / v) ** (1 / years) - 1) * 100 if v else None
+    def simple(days):
+        v = at(days)
+        return (last_v / v - 1) * 100 if v else None
+    res = {"nav": last_v, "nav_date": last_d.strftime("%Y-%m-%d"), "m1": simple(30), "m6": simple(182), "y1": simple(365),
+           "y3": cagr(365 * 3, 3), "y5": cagr(365 * 5, 5)}
+    return {k: (round(v, 3) if isinstance(v, float) else v) for k, v in res.items()}
+
+
+def build_funds(get=_mf_get) -> dict | None:
+    old = _load(os.path.join(OUT_DIR, "funds.json")) or {}
+    if old.get("updated"):
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(old["updated"])
+        if age < timedelta(hours=MF_REFRESH_HOURS) and old.get("funds"):
+            return None                      # NAVs change once a day – keep the cached file
+    codes = {f["query"]: f["code"] for f in old.get("funds", [])}
+    funds = []
+    for query, category in MUTUAL_FUNDS:
+        try:
+            code = codes.get(query)
+            if not code:
+                hits = get("https://api.mfapi.in/mf/search?q=" + requests.utils.quote(query))
+                pick = [h for h in hits if "direct" in h["schemeName"].lower() and "growth" in h["schemeName"].lower()
+                        and "idcw" not in h["schemeName"].lower() and "bonus" not in h["schemeName"].lower()]
+                if not pick:
+                    continue
+                code = pick[0]["schemeCode"]
+            data = get(f"https://api.mfapi.in/mf/{code}")
+            ret = _mf_returns(data.get("data", []))
+            if not ret:
+                continue
+            meta = data.get("meta", {})
+            funds.append({"query": query, "code": code, "name": meta.get("scheme_name", query), "house": meta.get("fund_house", ""),
+                          "category": category, **ret})
+        except Exception as exc:
+            print(f"  fund failed {query}: {exc}", file=sys.stderr)
+    if not funds:
+        return None
+    return {"updated": datetime.now(timezone.utc).isoformat(), "source": "AMFI NAVs via mfapi.in", "funds": funds}
+
 # =============================================================================
 # OPTIONAL: CLAUDE WRITES THE CRUX + IMPACT (only if the ANTHROPIC_API_KEY secret is set)
 # =============================================================================
@@ -662,6 +838,19 @@ def main():
         prices["updated"] = datetime.now(timezone.utc).isoformat()
         _write(os.path.join(OUT_DIR, "prices.json"), prices)
     print(f"  {len(prices['quotes'])} prices")
+    print("Fetching top performers…")
+    perf = build_performers()
+    if any(perf.values()):
+        perf["updated"] = datetime.now(timezone.utc).isoformat()
+        _write(os.path.join(OUT_DIR, "performers.json"), perf)
+    print(f"  {len(perf['stocks'])} stocks, {len(perf['etfs'])} ETFs, {len(perf['commodities'])} commodities")
+    print("Mutual funds…")
+    funds = build_funds()
+    if funds:
+        _write(os.path.join(OUT_DIR, "funds.json"), funds)
+        print(f"  {len(funds['funds'])} funds refreshed")
+    else:
+        print("  using cached fund data")
 
 
 if __name__ == "__main__":

@@ -62,7 +62,7 @@ h2{font-family:var(--f-head);font-weight:650;font-size:22px;margin:30px 0 12px;t
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field label,.lbl{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
 input[type=search],input[type=text],input[type=password],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
 .seg button{border:0;background:none;padding:6px 12px;cursor:pointer;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .toggle{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
@@ -143,6 +143,25 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 .tablewrap{overflow-x:auto}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;z-index:40;box-shadow:0 6px 24px rgba(0,0,0,.2);cursor:pointer}
 .disc{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);margin-top:40px;padding-top:14px}
+.edu{background:var(--watch-soft);color:var(--ink);font-size:13px;border-bottom:1px solid var(--line)}
+.edu .wrap{padding-block:7px}
+.edu b{color:var(--watch)}
+.pt{width:100%;border-collapse:collapse;font-size:14px}
+.pt th{cursor:pointer;white-space:nowrap;user-select:none}
+.pt th[aria-sort]{color:var(--ink)}
+.pt td.n,.pt th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pt tr.top3 td:first-child{color:var(--accent);font-weight:600}
+.pt td small{display:block;color:var(--muted);font-size:12px}
+.pt svg{width:90px;height:26px;display:block}
+.plan{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:860px){.plan{grid-template-columns:1fr}}
+.form{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.form .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form input[type=number]{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;font-family:var(--f-mono)}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.res .stat .v{font-size:22px}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 </style>
 </head>
 <body>
@@ -152,6 +171,8 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
     <nav aria-label="Sections">
       <a href="#news" data-v="news">News</a>
       <a href="#markets" data-v="markets">Markets</a>
+      <a href="#top" data-v="top">Top performers</a>
+      <a href="#planner" data-v="planner">Investment planner</a>
       <a href="#tracker" data-v="tracker">My tracker</a>
     </nav>
     <div class="live"><span class="dot" id="dot"></span><span id="liveText">Loading…</span></div>
@@ -159,6 +180,7 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
   <div class="wrap ribbon" id="ribbon" aria-label="Market snapshot"></div>
 </header>
 
+<div class="edu" role="note"><div class="wrap"><b>For education only.</b> WorldPulse is a learning tool, not investment advice. Nothing here is a recommendation to buy or sell. Past returns don't guarantee future returns. Please consult a SEBI-registered investment adviser before investing.</div></div>
 <main class="wrap" id="view"></main>
 <div id="readerHost"></div>
 <div id="toastHost"></div>
@@ -168,8 +190,10 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 /* ================= state ================= */
 const POLL_MS = 60000;                      // check for new data every minute
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
-let NEWS = null, PRICES = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
-const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following"};
+let NEWS = null, PRICES = null, PERF = null, FUNDS = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
+const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following",
+  tk:"Indian stocks", tp:"1Y", tsort:null, tdir:-1, fcat:"",
+  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:""};
 
 const LS = "worldpulse:v1";
 let ME = load();
@@ -217,11 +241,11 @@ async function getJSON(path){ const r = await fetch(path + "?t=" + Date.now(), {
 async function refresh(first){
   nextCheck = Date.now() + POLL_MS;
   try{
-    const [n, p] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null)]);
+    const [n, p, pf, fd] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null), getJSON("data/performers.json").catch(()=>null), getJSON("data/funds.json").catch(()=>null)]);
     const isNew = !NEWS || n.updated !== NEWS.updated;
     const fresh = NEWS ? n.articles.filter(a => !BYID[a.id]).length : 0;
-    NEWS = n; if (p) PRICES = p; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
-    if (isNew || first){ render(); if (!first && fresh) toast(`${fresh} new stor${fresh===1?"y":"ies"} – tap to see the latest`, () => { location.hash = "#news"; UI.sort="Latest"; render(); window.scrollTo({top:0}); }); }
+    NEWS = n; if (p) PRICES = p; if (pf) PERF = pf; if (fd) FUNDS = fd; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
+    if (isNew || first){ if (view()!=="planner" || first) render(); if (!first && fresh) toast(`${fresh} new stor${fresh===1?"y":"ies"} – tap to see the latest`, () => { location.hash = "#news"; UI.sort="Latest"; render(); window.scrollTo({top:0}); }); }
     else renderRibbon();
   }catch(e){
     if (first) $("#view").innerHTML = `<h1>Waiting for the first update</h1><p class="sub">No data yet. On GitHub, open the <b>Actions</b> tab, choose <b>Update news and publish site</b> and click <b>Run workflow</b>. The site fills in a couple of minutes later.</p>`;
@@ -248,14 +272,14 @@ function renderRibbon(){
 }
 
 /* ================= routing ================= */
-function view(){ const h = location.hash.replace("#",""); return ["news","markets","tracker","sources"].includes(h) ? h : (h.startsWith("story-") ? (UI.lastView||"news") : "news"); }
+function view(){ const h = location.hash.replace("#",""); return ["news","markets","top","planner","tracker","sources"].includes(h) ? h : (h.startsWith("story-") ? (UI.lastView||"news") : "news"); }
 window.addEventListener("hashchange", () => { const h = location.hash; if (h.startsWith("#story-")) openStory(h.slice(7)); else { closeReader(false); render(); } });
 function render(){
   if (!NEWS) return;
   const v = view(); UI.lastView = v;
   document.querySelectorAll("nav a").forEach(a => { if (a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   renderRibbon();
-  ({news:renderNews, markets:renderMarkets, tracker:renderTracker, sources:renderSources})[v]();
+  ({news:renderNews, markets:renderMarkets, top:renderTop, planner:renderPlanner, tracker:renderTracker, sources:renderSources})[v]();
   if (location.hash.startsWith("#story-") && !$("#readerHost").innerHTML) openStory(location.hash.slice(7));
 }
 
@@ -336,6 +360,137 @@ function renderMarkets(){
     <h2>News moving each region</h2>
     <span class="seg" data-seg="mreg">${(NEWS.regions||[]).map(r=>`<button aria-pressed="${UI.mreg===r}">${esc(r)}</button>`).join("")}</span>
     <div class="list">${regionNews.map(storyRow).join("") || `<div class="empty">No market-relevant stories for this region right now.</div>`}</div>`;
+}
+
+
+/* ================= TOP PERFORMERS ================= */
+const TKINDS = ["Indian stocks","US stocks","Global stocks","Mutual funds","ETFs","Commodities"];
+function topRows(){
+  if (UI.tk === "Mutual funds") return (FUNDS ? FUNDS.funds : []).filter(f => !UI.fcat || f.category === UI.fcat);
+  if (!PERF) return [];
+  if (UI.tk === "ETFs") return PERF.etfs;
+  if (UI.tk === "Commodities") return PERF.commodities;
+  const m = {"Indian stocks":"India","US stocks":"US","Global stocks":"Global"}[UI.tk];
+  return PERF.stocks.filter(x => x.market === m);
+}
+function renderTop(){
+  const fund = UI.tk === "Mutual funds";
+  const periods = fund ? [["1M","m1"],["6M","m6"],["1Y","y1"],["3Y","y3"],["5Y","y5"]] : [["1D","d1"],["1W","w1"],["1M","m1"],["6M","m6"],["1Y","y1"]];
+  if (!periods.some(p => p[0] === UI.tp)) UI.tp = "1Y";
+  const key = (periods.find(p => p[0] === UI.tp) || periods[periods.length-1])[1];
+  const sortKey = UI.tsort && periods.some(p=>p[1]===UI.tsort) ? UI.tsort : key;
+  const rows = topRows().filter(r => r[sortKey] != null).slice().sort((a,b) => (b[sortKey]-a[sortKey]) * (UI.tdir < 0 ? 1 : -1));
+  const cats = fund && FUNDS ? [...new Set(FUNDS.funds.map(f=>f.category))] : [];
+  const updated = fund ? (FUNDS && `NAVs as of ${FUNDS.funds[0]?.nav_date || "–"} (source: AMFI via mfapi.in). 3Y and 5Y are yearly averages (CAGR).`) : (PERF && `Prices updated ${ago(PERF.updated)} from Yahoo Finance; may be delayed.`);
+  const cell = v => v == null ? `<td class="n">–</td>` : `<td class="n ${v>=0?"pos":"neg"}">${pct(v)}</td>`;
+  $("#view").innerHTML = `
+    <h1>Top performers</h1>
+    <p class="sub">${esc(updated || "Data appears after the next update.")}</p>
+    <span class="seg" data-seg="tk">${TKINDS.map(k=>`<button aria-pressed="${UI.tk===k}">${k}</button>`).join("")}</span>
+    <div class="filters2">
+      <span class="lbl">Rank by</span><span class="seg" data-seg="tp">${periods.map(p=>`<button aria-pressed="${UI.tp===p[0]}">${p[0]}</button>`).join("")}</span>
+      ${fund ? `<select id="fcat" aria-label="Fund category" style="width:auto"><option value="">All categories</option>${cats.map(c=>`<option ${UI.fcat===c?"selected":""}>${esc(c)}</option>`).join("")}</select>` : ""}
+    </div>
+    <h2>${rows.length ? `Best ${UI.tp} returns first` : "No data yet"}</h2>
+    <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Name</th><th class="n">${fund?"NAV":"Price"}</th>
+      ${periods.map(p=>`<th class="n" data-tsort="${p[1]}" ${p[1]===sortKey?'aria-sort="descending"':""}>${p[0]}${p[1]===sortKey?(UI.tdir<0?" ↓":" ↑"):""}</th>`).join("")}
+      ${fund ? "<th></th>" : "<th>60 days</th>"}</tr></thead><tbody>
+      ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td>
+        <td>${esc(r.name)}<small>${esc(fund ? r.category + " · " + r.house : (r.ticker + " · " + r.market))}</small></td>
+        <td class="n">${fund ? r.nav.toFixed(2) : fmt(r.last)}${fund?"":`<small>${r.currency==="INR"?"₹":"$"}</small>`}</td>
+        ${periods.map(p=>cell(r[p[1]])).join("")}
+        ${fund ? `<td><button class="btn" data-planfund="${esc(r.code)}">Plan with this fund</button></td>` : `<td>${spark(r.spark,90,26)}</td>`}</tr>`).join("")}
+    </tbody></table></div>
+    <p class="disc">For education only. Rankings show past returns, which don't predict future returns. This is not a recommendation to buy or sell any stock, fund or commodity.</p>`;
+  if ($("#fcat")) $("#fcat").onchange = e => { UI.fcat = e.target.value; renderTop(); };
+}
+
+/* ================= INVESTMENT PLANNER ================= */
+function simulate(o){
+  // monthly investing at the start of each month; SIP rises by step-up % every year
+  // same conventions as common Indian SIP calculators: SIP grows at rate/12 a month, a lump sum compounds yearly
+  const rs = o.rate/100/12, rl = Math.pow(1 + o.rate/100, 1/12) - 1, months = Math.round(o.yrs*12);
+  let bs = 0, bl = o.lump || 0, inv = o.lump || 0, sip = o.sip || 0; const years = [];
+  for (let m = 1; m <= months; m++){
+    bs = (bs + sip) * (1 + rs); bl *= 1 + rl; inv += sip;
+    if (m % 12 === 0){ years.push({y:m/12, inv, bal:bs+bl}); sip *= 1 + (o.step||0)/100; }
+  }
+  if (months % 12) years.push({y:o.yrs, inv, bal:bs+bl});
+  return {inv, bal:bs+bl, years};
+}
+function sipForGoal(goal, o){
+  let lo = 0, hi = goal;
+  for (let i = 0; i < 60; i++){ const mid = (lo+hi)/2; if (simulate({...o, sip:mid, lump:0}).bal >= goal) hi = mid; else lo = mid; }
+  return hi;
+}
+const inr = v => "₹" + Math.round(v).toLocaleString("en-IN");
+function renderPlanner(){
+  const funds = FUNDS ? FUNDS.funds.filter(f => f.y3 != null || f.y1 != null) : [];
+  $("#view").innerHTML = `
+    <h1>Investment planner</h1>
+    <p class="sub">See how a monthly SIP or a one-time investment could grow, or how much you'd need to invest to reach a goal. You can use a mutual fund's past return as the growth rate.</p>
+    <div class="plan">
+      <form class="form" id="pform" onsubmit="return false">
+        <span class="seg" data-seg="pm">${["SIP","Lump sum","Goal"].map(k=>`<button type="button" aria-pressed="${UI.pm===k}">${k}</button>`).join("")}</span>
+        ${UI.pm==="SIP" ? `<div class="field"><label for="amt">Monthly investment (₹)</label><input type="number" id="amt" min="100" step="500" value="${UI.amt}"></div>
+          <div class="field"><label for="step">Increase SIP every year by (%)</label><input type="number" id="step" min="0" max="50" step="1" value="${UI.step}"></div>` : ""}
+        ${UI.pm==="Lump sum" ? `<div class="field"><label for="lump">One-time investment (₹)</label><input type="number" id="lump" min="1000" step="1000" value="${UI.lump}"></div>` : ""}
+        ${UI.pm==="Goal" ? `<div class="field"><label for="goal">Target amount (₹)</label><input type="number" id="goal" min="10000" step="10000" value="${UI.goal}"></div>
+          <div class="field"><label for="step">Increase SIP every year by (%)</label><input type="number" id="step" min="0" max="50" step="1" value="${UI.step}"></div>` : ""}
+        <div class="two">
+          <div class="field"><label for="yrs">Years</label><input type="number" id="yrs" min="1" max="50" step="1" value="${UI.yrs}"></div>
+          <div class="field"><label for="rate">Expected return (% a year)</label><input type="number" id="rate" min="0" max="40" step="0.1" value="${UI.rate}"></div>
+        </div>
+        <div class="field"><label for="fundSel">Or use a fund's past return</label>
+          <select id="fundSel"><option value="">Type my own rate</option>${funds.map(f=>{ const r = f.y3 != null ? f.y3 : f.y1, lab = f.y3 != null ? "3Y CAGR" : "1Y"; return `<option value="${esc(f.code)}" data-r="${r.toFixed(1)}" ${String(UI.fundSel)===String(f.code)?"selected":""}>${esc(f.name.replace(/ - Direct Plan - Growth| Direct Growth/i,""))} · ${lab} ${r.toFixed(1)}%</option>`; }).join("")}</select>
+          <span class="note">Past returns are only a reference point; real returns go up and down.</span></div>
+        <div class="field"><label for="infl">Inflation (% a year)</label><input type="number" id="infl" min="0" max="15" step="0.5" value="${UI.infl}"></div>
+      </form>
+      <div id="pout" style="min-width:0"></div>
+    </div>
+    <p class="disc">For education only. These are estimates that assume a fixed yearly return, which real investments never deliver; actual results will differ and can be negative. Taxes, exit loads and fund expenses aren't included. Not investment advice.</p>`;
+  const form = $("#pform");
+  form.oninput = e => {
+    const id = e.target.id;
+    if (id === "fundSel"){ UI.fundSel = e.target.value; const o = e.target.selectedOptions[0]; if (o && o.dataset.r){ UI.rate = +o.dataset.r; $("#rate").value = UI.rate; } }
+    else if (id){ const v = parseFloat(e.target.value); if (!isNaN(v)) UI[id] = v; if (id === "rate"){ UI.fundSel = ""; $("#fundSel").value = ""; } }
+    planOut();
+  };
+  planOut();
+}
+function planOut(){
+  const yrs = Math.max(1, Math.min(50, UI.yrs||1)), rate = Math.max(0, UI.rate||0), real = v => v / Math.pow(1 + (UI.infl||0)/100, yrs);
+  let res, headline = "";
+  if (UI.pm === "SIP"){ res = simulate({sip:UI.amt, lump:0, step:UI.step, yrs, rate}); }
+  else if (UI.pm === "Lump sum"){ res = simulate({sip:0, lump:UI.lump, step:0, yrs, rate}); }
+  else {
+    const need = sipForGoal(UI.goal, {step:UI.step, yrs, rate}), lumpNeed = UI.goal / Math.pow(1+rate/100, yrs);
+    res = simulate({sip:need, lump:0, step:UI.step, yrs, rate});
+    headline = `<div class="res" style="margin-bottom:12px"><div class="stat"><div class="v num">${inr(need)}</div><div class="k">Monthly SIP needed to start${UI.step?` (rising ${UI.step}%/yr)`:""}</div></div>
+      <div class="stat"><div class="v num">${inr(lumpNeed)}</div><div class="k">Or one-time investment today</div></div></div>`;
+  }
+  const gains = res.bal - res.inv;
+  const ys = res.years, W = 640, H = 220, pad = 34, max = Math.max(...ys.map(y=>y.bal), 1), bw = (W - pad - 10) / ys.length;
+  const Y = v => H - 24 - v/max*(H-40);
+  const bars = ys.map((y,i)=>{ const x = pad + i*bw + bw*0.15, w = bw*0.7;
+    return `<rect x="${x.toFixed(1)}" y="${Y(y.bal).toFixed(1)}" width="${w.toFixed(1)}" height="${(H-24-Y(y.bal)).toFixed(1)}" fill="var(--accent)" opacity=".85"><title>Year ${y.y}: value ${inr(y.bal)}, invested ${inr(y.inv)}</title></rect>
+      <rect x="${x.toFixed(1)}" y="${Y(y.inv).toFixed(1)}" width="${w.toFixed(1)}" height="${(H-24-Y(y.inv)).toFixed(1)}" fill="var(--muted)" opacity=".55"/>
+      ${(ys.length<=15 || (i+1)%5===0 || i===ys.length-1) ? `<text x="${(x+w/2).toFixed(1)}" y="${H-8}" font-size="10" text-anchor="middle" fill="var(--muted)">${y.y}</text>` : ""}`; }).join("");
+  const short = v => v >= 1e7 ? "₹" + (v/1e7).toFixed(1) + " Cr" : v >= 1e5 ? "₹" + (v/1e5).toFixed(1) + " L" : inr(v);
+  $("#pout").innerHTML = `${headline}
+    <div class="res">
+      <div class="stat"><div class="v num">${short(res.inv)}</div><div class="k">You invest</div></div>
+      <div class="stat"><div class="v num">${short(res.bal)}</div><div class="k">Estimated value</div></div>
+      <div class="stat"><div class="v num pos">${short(gains)}</div><div class="k">Estimated gains</div></div>
+      <div class="stat"><div class="v num">${short(real(res.bal))}</div><div class="k">Value in today's money</div></div>
+    </div>
+    <h2 style="font-size:18px">Growth year by year</h2>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="Invested amount and estimated value for each year">
+      <line x1="${pad}" x2="${W-10}" y1="${H-24}" y2="${H-24}" stroke="var(--line)"/>
+      <text x="2" y="${Y(max)+4}" font-size="10" fill="var(--muted)">${short(max)}</text>${bars}
+    </svg>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Estimated value</span><span><i style="background:var(--muted);opacity:.55"></i>Amount invested</span><span>Years →</span></div>
+    <p class="note">Assumes ${rate}% a year every year${UI.pm!=="Lump sum" && UI.step ? `, with the SIP rising ${UI.step}% each year` : ""}. "Today's money" adjusts for ${UI.infl}% inflation.</p>`;
 }
 
 /* ================= TRACKER ================= */
@@ -525,10 +680,12 @@ SUMMARY: ${a.summary||"(none)"}`;
 
 /* ================= global clicks ================= */
 document.addEventListener("click", e => {
-  const t = e.target.closest("[data-open],[data-track],[data-readtoggle],[data-close],[data-status],[data-seen],[data-untopic],.seg button");
+  const t = e.target.closest("[data-planfund],[data-tsort],[data-open],[data-track],[data-readtoggle],[data-close],[data-status],[data-seen],[data-untopic],.seg button");
   if (!t) return;
   if (t.dataset.open){ e.preventDefault(); openStory(t.dataset.open); return; }
   if (t.dataset.close !== undefined){ closeReader(t.tagName !== "A"); return; }
+  if (t.dataset.planfund){ const f = FUNDS.funds.find(x => String(x.code) === t.dataset.planfund); UI.fundSel = String(f.code); UI.rate = +((f.y3 != null ? f.y3 : f.y1).toFixed(1)); UI.pm = "SIP"; location.hash = "#planner"; return; }
+  if (t.dataset.tsort){ if (UI.tsort === t.dataset.tsort) UI.tdir *= -1; else { UI.tsort = t.dataset.tsort; UI.tdir = -1; } renderTop(); return; }
   if (t.dataset.track){ const id = t.dataset.track;
     if (ME.tracked[id]) delete ME.tracked[id];
     else { const a = BYID[id]; ME.tracked[id] = {added:new Date().toISOString(), note:"", status:"Following", snap: a ? {id:a.id,title:a.title,link:a.link,publisher:a.publisher,published:a.published,summary:a.summary,region:a.region,impact:a.impact,also_in:a.also_in} : null}; }
@@ -538,7 +695,7 @@ document.addEventListener("click", e => {
   if (t.dataset.seen){ ME.topics[t.dataset.seen].lastSeen = new Date().toISOString(); save(); render(); return; }
   if (t.dataset.untopic){ delete ME.topics[t.dataset.untopic]; save(); render(); return; }
   const seg = t.parentElement.dataset.seg;
-  if (seg){ UI[seg] = t.textContent; UI.limit = 40; render(); }
+  if (seg){ UI[seg] = t.textContent; UI.limit = 40; if (seg === "tk" || seg === "tp") UI.tsort = null; render(); }
 });
 
 refresh(true);
