@@ -173,6 +173,10 @@ def _download(tickers):
     c = df["Close"] if "Close" in df.columns.get_level_values(0) else df
     if not hasattr(c, "columns"):
         c = c.to_frame(tickers[0])
+    v = df["Volume"] if "Volume" in df.columns.get_level_values(0) else None
+    if v is not None and not hasattr(v, "columns"):
+        v = v.to_frame(tickers[0])
+    c.attrs["volume"] = v                      # daily volumes travel with the closes
     return c
 
 
@@ -219,10 +223,17 @@ def build(listings: list[dict], download=_download, pause=1.0, meta=None, shards
                 if x["t"] in df.columns:
                     p = perf(df[x["t"]])
                     if p:
+                        vol = df.attrs.get("volume")
+                        lv = av = None
+                        if vol is not None and x["t"] in vol.columns:
+                            vs = vol[x["t"]].dropna()
+                            if len(vs):
+                                lv = int(vs.iloc[-1])
+                                av = int(vs.iloc[-21:-1].mean()) if len(vs) > 5 else None
                         m = meta.get(x["t"], {})
                         rows.append([x["t"], x["n"][:70], x["x"], p["p"], p["d1"], p["w1"], p["m1"], p["m6"], p["y1"], p["as_of"],
                                      m.get("sector") or "", m.get("size") or ("Below top 750" if x["x"] == "NSE" else ""), m.get("country") or ("India" if x["x"] in ("NSE", "BSE") else ""),
-                                     m.get("industry") or ""])
+                                     m.get("industry") or "", lv, av])
                         if shards is not None:
                             shards.setdefault(shard_of(x["t"]), {})[x["t"]] = _series(df[x["t"]])
                         ok += 1
@@ -255,7 +266,7 @@ def main():
     for r in rows:
         counts[r[2]] = counts.get(r[2], 0) + 1
     data = {"updated": datetime.now(timezone.utc).isoformat(), "count": len(rows), "by_exchange": counts,
-            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of", "sector", "size", "country", "industry"],
+            "cols": ["ticker", "name", "exchange", "price", "d1", "w1", "m1", "m6", "y1", "as_of", "sector", "size", "country", "industry", "volume", "avg_volume_20d"],
             "shards": N_SHARDS, "rows": rows}
     tmp = os.path.join(OUT_DIR, "universe.json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:

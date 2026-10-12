@@ -44,6 +44,13 @@ nav a[aria-current="page"]{background:var(--ink);color:var(--bg)}
 .dot.stale{background:var(--med);animation:none}
 @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--up) 60%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
 @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.gs{position:relative;flex:1 1 220px;max-width:340px;min-width:0}
+.gs input{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 14px;width:100%}
+.gsr{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.15);z-index:25;max-height:60vh;overflow-y:auto}
+.gsr button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+.gsr button:hover,.gsr button:focus{background:var(--sunk)}
+.gsr small{color:var(--muted);font-size:12px;white-space:nowrap}
+@media (max-width:760px){.gs{order:3;flex-basis:100%;max-width:none}}
 .ribbon{display:flex;gap:22px;overflow-x:auto;padding-block:8px;border-top:1px solid var(--line);font-size:13px;scrollbar-width:none}
 .ribbon::-webkit-scrollbar{display:none}
 .rq{white-space:nowrap;display:flex;gap:6px;align-items:baseline}
@@ -186,6 +193,7 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
       <a href="#planner" data-v="planner">Investment planner</a>
       <a href="#tracker" data-v="tracker">My tracker</a>
     </nav>
+    <div class="gs"><input type="search" id="gsearch" placeholder="Search any stock or fund…" aria-label="Search any stock or fund" autocomplete="off"><div id="gsr" class="gsr" hidden></div></div>
     <div class="live"><span class="dot" id="dot"></span><span id="liveText">Loading…</span></div>
   </div>
   <div class="wrap ribbon" id="ribbon" aria-label="Market snapshot"></div>
@@ -201,10 +209,10 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05
 /* ================= state ================= */
 const POLL_MS = 60000;                      // check for new data every minute
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
-let NEWS = null, PRICES = null, PERF = null, FUNDS = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
+let NEWS = null, PRICES = null, PERF = null, FUNDS = null, ACTIVE = null, BYID = {}, lastNewsUpdate = null, nextCheck = Date.now() + POLL_MS;
 const UI = {q:"", regions:new Set(), cat:"", hours:24, level:"All", hideRead:false, sort:"Latest", limit:40, mreg:"India", trf:"Following",
-  tk:"All listed stocks", tp:"1Y", tsort:null, tdir:-1, fcat:"",
-  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50, usec:"", usz:"", uv:"List"};
+  tk:"Most active today", tp:"1Y", tsort:null, tdir:-1, fcat:"",
+  pm:"SIP", amt:10000, yrs:10, rate:12, step:10, infl:6, goal:5000000, lump:100000, fundSel:"", uq:"", ux:"", up:"1D", udir:-1, ulim:50, usec:"", usz:"", uv:"List", am:"India", as:"Volume"};
 
 const LS = "worldpulse:v1";
 let ME = load();
@@ -252,10 +260,10 @@ async function getJSON(path){ const r = await fetch(path + "?t=" + Date.now(), {
 async function refresh(first){
   nextCheck = Date.now() + POLL_MS;
   try{
-    const [n, p, pf, fd] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null), getJSON("data/performers.json").catch(()=>null), getJSON("data/funds.json").catch(()=>null)]);
+    const [n, p, pf, fd, ac] = await Promise.all([getJSON("data/news.json"), getJSON("data/prices.json").catch(()=>null), getJSON("data/performers.json").catch(()=>null), getJSON("data/funds.json").catch(()=>null), getJSON("data/active.json").catch(()=>null)]);
     const isNew = !NEWS || n.updated !== NEWS.updated;
     const fresh = NEWS ? n.articles.filter(a => !BYID[a.id]).length : 0;
-    NEWS = n; if (p) PRICES = p; if (pf) PERF = pf; if (fd) FUNDS = fd; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
+    NEWS = n; if (p) PRICES = p; if (pf) PERF = pf; if (fd) FUNDS = fd; if (ac) ACTIVE = ac; BYID = {}; n.articles.forEach(a => BYID[a.id] = a);
     if (isNew || first){ if (view()!=="planner" || first) render(); if (!first && fresh) toast(`${fresh} new stor${fresh===1?"y":"ies"} – tap to see the latest`, () => { location.hash = "#news"; UI.sort="Latest"; render(); window.scrollTo({top:0}); }); }
     else renderRibbon();
   }catch(e){
@@ -375,7 +383,7 @@ function renderMarkets(){
 
 
 /* ================= TOP PERFORMERS ================= */
-const TKINDS = ["All listed stocks","Indian stocks","US stocks","Global stocks","Mutual funds","ETFs","Commodities"];
+const TKINDS = ["Most active today","All listed stocks","Indian stocks","US stocks","Global stocks","Mutual funds","ETFs","Commodities"];
 let UNIV = null, univLoading = false;
 function topRows(){
   if (UI.tk === "Mutual funds") return (FUNDS ? FUNDS.funds : []).filter(f => !UI.fcat || f.category === UI.fcat);
@@ -389,6 +397,7 @@ function heat(v){ if (v == null) return "var(--surface)"; const a = Math.min(Mat
   return `color-mix(in srgb, var(${v>=0?"--up-soft":"--down-soft"}) ${Math.round(a*100)}%, var(--surface))`; }
 function renderTop(){
   if (UI.tk === "All listed stocks") return renderUniverse();
+  if (UI.tk === "Most active today") return renderActive();
   const fund = UI.tk === "Mutual funds";
   const periods = fund ? [["1M","m1"],["6M","m6"],["1Y","y1"],["3Y","y3"],["5Y","y5"]] : [["1D","d1"],["1W","w1"],["1M","m1"],["6M","m6"],["1Y","y1"]];
   if (!periods.some(p => p[0] === UI.tp)) UI.tp = "1Y";
@@ -442,7 +451,7 @@ function renderUniverse(){
     <span class="seg" data-seg="tk">${TKINDS.map(k=>`<button aria-pressed="${UI.tk===k}">${k}</button>`).join("")}</span>`;
   if (!UNIV){ $("#view").innerHTML = head + `<p class="sub" style="margin-top:16px">Loading every listed stock…</p>`; loadUniverse(); return; }
   if (UNIV.missing || !UNIV.rows.length){ $("#view").innerHTML = head + `<p class="sub" style="margin-top:16px">The full stock list is built twice a day after market close. It will appear here after the next run.</p>`; return; }
-  const P = [["1D",4],["1W",5],["1M",6],["6M",7],["1Y",8]], col = (P.find(p=>p[0]===UI.up)||P[0])[1];
+  const P = [["1D",4],["1W",5],["1M",6],["6M",7],["1Y",8],["Volume",14]], col = (P.find(p=>p[0]===UI.up)||P[0])[1];
   const ex = UNIV.by_exchange || {}, q = UI.uq.trim().toLowerCase();
   let rows = UNIV.rows.filter(r => r[col] != null);
   if (UI.ux === "India") rows = rows.filter(r => r[2]==="NSE" || r[2]==="BSE");
@@ -473,7 +482,7 @@ function renderUniverse(){
     ${UI.uv === "Sector map" ? sectorMap(base, col) : `
     <h2>${rows.length.toLocaleString()} ${rows.length===1?"stock":"stocks"}</h2>
     <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th>${P.map(p=>`<th class="n">${p[0]}${p[1]===col?(UI.udir<0?" ↓":" ↑"):""}</th>`).join("")}</tr></thead><tbody>
-      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r[0])}">${esc(r[1])}</button><small>${esc([r[0], r[2], r[10], r[11]].filter(Boolean).join(" · "))}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}</tr>`).join("")}
+      ${rows.slice(0, UI.ulim).map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r[0])}">${esc(r[1])}</button><small>${esc([r[0], r[2], r[10], r[11]].filter(Boolean).join(" · "))}</small></td><td class="n">${cur(r)}${fmt(r[3])}</td>${[4,5,6,7,8].map(c=>cell(r[c])).join("")}<td class="n">${bigNum(r[14], cur(r)==="₹")}</td></tr>`).join("")}
     </tbody></table></div>
     ${rows.length > UI.ulim ? `<button class="btn more" id="umore">Show more (${(rows.length-UI.ulim).toLocaleString()} left)</button>` : ""}`}
     <p class="disc">For education only. Very small or rarely traded stocks can show extreme percentage moves. Past returns don't predict future returns; this is not a recommendation to buy or sell.</p>`;
@@ -547,6 +556,64 @@ function openFundChart(code){
   draw("3Y");
   $("#frange").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("#frange").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed", x===b)); draw(b.textContent); };
 }
+
+
+/* ================= MOST ACTIVE (intraday volume) ================= */
+function bigNum(v, india){
+  if (v == null) return "–";
+  if (india){ if (v >= 1e7) return (v/1e7).toFixed(2) + " Cr"; if (v >= 1e5) return (v/1e5).toFixed(2) + " L"; return Math.round(v).toLocaleString("en-IN"); }
+  if (v >= 1e9) return (v/1e9).toFixed(2) + "B"; if (v >= 1e6) return (v/1e6).toFixed(2) + "M"; if (v >= 1e3) return (v/1e3).toFixed(1) + "K"; return String(Math.round(v));
+}
+function renderActive(){
+  const india = UI.am === "India", list = (ACTIVE && ACTIVE[UI.am]) || [];
+  const key = {"Volume":"vol","Value traded":"value","Volume surge":"surge"}[UI.as] || "vol";
+  const rows = list.filter(r => r[key] != null).slice().sort((a,b) => b[key]-a[key]).slice(0, 50);
+  const day = rows[0] ? rows[0].day : "", cur = india ? "₹" : "$";
+  $("#view").innerHTML = `
+    <h1>Top performers</h1>
+    <span class="seg" data-seg="tk">${TKINDS.map(k=>`<button aria-pressed="${UI.tk===k}">${k}</button>`).join("")}</span>
+    <p class="sub" style="margin-top:12px">${ACTIVE ? `Most traded shares in today's session (${esc(day)}), from about ${india?"500 Indian":"700 large US"} companies. Updated ${ago(ACTIVE.updated)}; Yahoo Finance volumes can lag about 15 minutes.` : "Intraday volumes appear after the next update."}</p>
+    <div class="filters2">
+      <span class="lbl">Market</span><span class="seg" data-seg="am">${["India","US"].map(x=>`<button aria-pressed="${UI.am===x}">${x}</button>`).join("")}</span>
+      <span class="lbl">Rank by</span><span class="seg" data-seg="as">${["Volume","Value traded","Volume surge"].map(x=>`<button aria-pressed="${UI.as===x}">${x}</button>`).join("")}</span>
+    </div>
+    <p class="note" style="margin-top:8px">${UI.as==="Volume" ? "Number of shares traded today." : UI.as==="Value traded" ? "Shares traded × price: where the most money changed hands today." : "Today's volume compared with the stock's average day over the last month (2× = twice the usual)."}</p>
+    <h2>${rows.length ? `Top ${rows.length} by ${UI.as.toLowerCase()}` : "No data yet"}</h2>
+    <div class="tablewrap"><table class="pt"><thead><tr><th>#</th><th>Company</th><th class="n">Price</th><th class="n">Today</th><th class="n">Volume</th><th class="n">Value traded</th><th class="n">vs usual</th></tr></thead><tbody>
+      ${rows.map((r,i)=>`<tr class="${i<3?"top3":""}"><td>${i+1}</td><td><button class="linkish" data-chart="${esc(r.t)}">${esc(r.n)}</button><small>${esc([r.t, r.sector, r.size].filter(Boolean).join(" · "))}</small></td>
+        <td class="n">${cur}${fmt(r.price)}</td><td class="n ${r.chg>=0?"pos":"neg"}">${r.chg==null?"–":pct(r.chg)}</td>
+        <td class="n">${bigNum(r.vol, india)}</td><td class="n">${cur}${bigNum(r.value, india)}</td><td class="n">${r.surge==null?"–":r.surge.toFixed(1)+"×"}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="disc">For education only. High volume shows interest, not direction; it is not a signal to buy or sell. Intraday trading is high risk.</p>`;
+}
+
+/* ================= GLOBAL SEARCH ================= */
+function searchAll(q){
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const out = [];
+  if (UNIV) for (const r of UNIV.rows){
+    const t = r[0].toLowerCase(), n = r[1].toLowerCase();
+    const score = t === q || t.split(".")[0] === q ? 0 : t.startsWith(q) ? 1 : n.startsWith(q) ? 2 : n.includes(q) ? 3 : t.includes(q) ? 4 : 9;
+    if (score < 9) out.push({score, kind:"stock", id:r[0], name:r[1], sub:`${r[0]} · ${r[2]}`});
+  }
+  if (FUNDS) for (const f of FUNDS.funds) if (f.name.toLowerCase().includes(q)) out.push({score:2.5, kind:"fund", id:f.code, name:f.name.replace(/ - Direct Plan - Growth.*/i,""), sub:`Mutual fund · ${f.category}`});
+  if (PERF) for (const x of [...PERF.etfs, ...PERF.commodities]) if (x.name.toLowerCase().includes(q) || x.ticker.toLowerCase().startsWith(q)) out.push({score:2.6, kind:"stock", id:x.ticker, name:x.name, sub:x.ticker});
+  return out.sort((a,b) => a.score-b.score || a.name.length-b.name.length).slice(0, 10);
+}
+(function(){
+  const inp = $("#gsearch"), box = $("#gsr");
+  const show = () => {
+    const res = searchAll(inp.value);
+    if (!inp.value.trim()){ box.hidden = true; return; }
+    box.innerHTML = res.length ? res.map(r=>`<button type="button" ${r.kind==="fund"?`data-fundchart="${esc(r.id)}"`:`data-chart="${esc(r.id)}"`}><span>${esc(r.name)}</span><small>${esc(r.sub)}</small></button>`).join("")
+      : `<div class="note" style="padding:10px 14px">${UNIV ? "No match. Try a company name or symbol." : "Loading the stock list…"}</div>`;
+    box.hidden = false;
+  };
+  inp.addEventListener("focus", () => { loadUniverse().then(show); });
+  inp.addEventListener("input", show);
+  inp.addEventListener("keydown", e => { if (e.key === "Enter"){ const b = box.querySelector("button"); if (b) b.click(); } if (e.key === "Escape"){ box.hidden = true; inp.blur(); } });
+  document.addEventListener("click", e => { if (!e.target.closest(".gs")) box.hidden = true; else if (e.target.closest(".gsr button")){ box.hidden = true; inp.value = ""; } });
+})();
 
 /* ================= INVESTMENT PLANNER ================= */
 function simulate(o){

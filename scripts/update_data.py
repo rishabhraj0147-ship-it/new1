@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -778,6 +779,86 @@ def build_funds(get=_mf_get) -> dict | None:
     return {"v": FUNDS_VERSION, "updated": datetime.now(timezone.utc).isoformat(), "source": "AMFI NAVs via mfapi.in", "funds": funds}
 
 
+
+# =============================================================================
+# MOST ACTIVE TODAY (intraday volume) – the ~1,200 biggest Indian and US companies
+# =============================================================================
+def _intraday(tickers):
+    import yfinance as yf
+    return yf.download(tickers, period="1d", interval="15m", auto_adjust=False, progress=False, threads=True, group_by="column")
+
+
+def build_active(intraday=_intraday) -> dict | None:
+    uni = _load(os.path.join(OUT_DIR, "universe.json"))
+    if not uni or not uni.get("rows"):
+        return None
+    rows = uni["rows"]
+    pick = {"India": [r for r in rows if r[2] in ("NSE", "BSE") and len(r) > 11 and r[11] in ("Large cap", "Mid cap", "Small cap")],
+            "US": [r for r in rows if r[2] not in ("NSE", "BSE") and len(r) > 11 and r[11] in ("Mega cap", "Large cap")]}
+    out = {}
+    for market, rs in pick.items():
+        res = []
+        for i in range(0, len(rs), 200):
+            chunk = rs[i:i + 200]
+            try:
+                df = intraday([r[0] for r in chunk])
+            except Exception as exc:
+                print(f"  intraday failed ({market}): {exc}", file=sys.stderr)
+                continue
+            if df is None or df.empty:
+                continue
+            lv0 = df.columns.get_level_values(0)
+            if "Volume" not in lv0 or "Close" not in lv0:
+                continue
+            V, Cl = df["Volume"], df["Close"]
+            for r in chunk:
+                t = r[0]
+                if t not in V.columns or t not in Cl.columns:
+                    continue
+                c = Cl[t].dropna()
+                if not len(c):
+                    continue
+                day = c.index[-1].date()
+                v = V[t].dropna()
+                v = v[[d.date() == day for d in v.index]]
+                vol = float(v.sum())
+                if vol <= 0:
+                    continue
+                last = float(c.iloc[-1])
+                value = float((c.reindex(v.index).ffill().fillna(last) * v).sum())
+                prev = r[3] if r[9] < day.isoformat() else (r[3] / (1 + r[4] / 100) if r[4] is not None else r[3])
+                res.append({"t": t, "n": r[1], "x": r[2], "sector": r[10], "size": r[11], "price": round(last, 2),
+                            "chg": round((last / prev - 1) * 100, 2) if prev else None, "vol": int(vol), "value": round(value),
+                            "surge": round(vol / r[15], 2) if len(r) > 15 and r[15] else None, "day": day.isoformat(),
+                            "as_of": c.index[-1].tz_convert("UTC").isoformat() if c.index[-1].tzinfo else c.index[-1].isoformat()})
+            time.sleep(0.5)
+        keep = {}
+        for lst in (sorted(res, key=lambda x: -x["vol"])[:100], sorted(res, key=lambda x: -x["value"])[:100],
+                    sorted([x for x in res if x["surge"]], key=lambda x: -x["surge"])[:100]):
+            for x in lst:
+                keep[x["t"]] = x
+        out[market] = sorted(keep.values(), key=lambda x: -x["vol"])
+    if not any(out.values()):
+        return None
+    return {"updated": datetime.now(timezone.utc).isoformat(), **out}
+
+# =============================================================================
+# OPTIONAL: CLAUDE WRITES THE CRUX + IMPACT (only if the ANTHROPIC_API_KEY secret is set)
+# =============================================================================
+AI_MODEL = os.environ.get("WORLDPULSE_MODEL", "claude-haiku-4-5-20251001")
+AI_MAX_PER_RUN = 200       # new stories analysed per run (keeps cost low)
+AI_PROMPT = """You are a markets analyst writing for busy retail investors in India and worldwide.
+For EACH news item below, return:
+- "crux": the core of the story in ONE plain sentence (max 30 words), facts only.
+- "positive": up to 3 short phrases naming who could GAIN in markets (sectors, assets, countries, or named companies) and why, e.g. "Oil producers – higher realisations".
+- "negative": up to 3 short phrases naming who could LOSE and why.
+If an item has no real market relevance, use empty lists.
+Return ONLY a JSON array: [{"id": "...", "crux": "...", "positive": ["..."], "negative": ["..."]}]
+
+ITEMS:
+"""
+
+
 def ai_enrich(articles: list[dict], previous: dict) -> int:
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     for a in articles:                       # reuse earlier AI notes
@@ -881,6 +962,15 @@ def main():
         perf["updated"] = datetime.now(timezone.utc).isoformat()
         _write(os.path.join(OUT_DIR, "performers.json"), perf)
     print(f"  {len(perf['stocks'])} stocks, {len(perf['etfs'])} ETFs, {len(perf['commodities'])} commodities")
+    print("Most active (intraday volume)…")
+    try:
+        act = build_active()
+    except Exception as exc:
+        act = None
+        print(f"  most-active failed: {exc}", file=sys.stderr)
+    if act:
+        _write(os.path.join(OUT_DIR, "active.json"), act)
+        print(f"  India {len(act.get('India', []))}, US {len(act.get('US', []))}")
     print("Mutual funds…")
     funds = build_funds()
     if funds:

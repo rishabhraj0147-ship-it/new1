@@ -23,7 +23,7 @@ concurrency:
 jobs:
   update-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -60,7 +60,7 @@ jobs:
         run: |
           rm -rf /tmp/pub && mkdir -p /tmp/pub/data
           cp data/news.json data/prices.json /tmp/pub/data/ 2>/dev/null || true
-          cp data/performers.json data/funds.json /tmp/pub/data/ 2>/dev/null || true
+          cp data/performers.json data/funds.json data/active.json /tmp/pub/data/ 2>/dev/null || true
           cd /tmp/pub
           git init -q -b data
           git add -A
