@@ -1,0 +1,56 @@
+# WorldPulse: GitHub's own timer often skips or delays scheduled runs by hours.
+# This helper starts "Update news and publish site" itself every 15 minutes, and the
+# all-listed-stocks update after each market close if it has not run yet.
+# One copy runs at a time for about 5.5 hours, then the next copy takes over.
+name: Keep the site fresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *"     # backup starter, only matters if the chain ever stops
+
+permissions:
+  actions: write               # allowed to start the other workflows
+  contents: read
+
+concurrency:
+  group: keep-fresh
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Start updates on time
+        run: |
+          busy() { gh run list -R "$REPO" -w "$1" -L 5 --json status -q '[.[]|select(.status!="completed")]|length'; }
+          end=$(( $(date +%s) + 330*60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            # news, prices and the site: every 15 minutes
+            if [ "$(busy update-data.yml)" = "0" ]; then gh workflow run update-data.yml -R "$REPO" --ref main || true; fi
+            # all listed stocks: after 11:30 and 21:45 UTC on weekdays, if not yet run since that time
+            slot=$(python3 - <<'PY'
+          import datetime as d
+          n=d.datetime.now(d.timezone.utc); best=None
+          for k in range(0,4):
+              day=(n-d.timedelta(days=k)).date()
+              if day.weekday()>4: continue
+              for hh,mm in ((21,45),(11,30)):
+                  t=d.datetime(day.year,day.month,day.day,hh,mm,tzinfo=d.timezone.utc)
+                  if t<=n and (best is None or t>best): best=t
+          print(best.strftime('%Y-%m-%dT%H:%M:%SZ') if best else '')
+          PY
+          )
+            last=$(gh run list -R "$REPO" -w update-universe.yml -L 1 --json createdAt -q '.[0].createdAt' || echo '')
+            if [ -n "$slot" ] && { [ -z "$last" ] || [[ "$last" < "$slot" ]]; } && [ "$(busy update-universe.yml)" = "0" ]; then
+              gh workflow run update-universe.yml -R "$REPO" --ref main || true
+            fi
+            sleep 900
+          done
+      - name: Hand over to the next copy
+        if: always()
+        run: gh workflow run keep-fresh.yml -R "$REPO" --ref main || true
