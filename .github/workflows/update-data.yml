@@ -1,11 +1,11 @@
-# WorldPulse: fetches fresh news and prices every 15 minutes, saves them in data/,
+# WorldPulse: fetches fresh news and prices every 5 minutes, saves them in data/,
 # and publishes the website on GitHub Pages.
 # One-time setup: Settings → Pages → Source = "GitHub Actions".
 name: Update news and publish site
 
 on:
   schedule:
-    - cron: "*/15 * * * *"     # every 15 minutes (GitHub sometimes starts it a few minutes late)
+    - cron: "*/5 * * * *"      # every 5 minutes (GitHub sometimes starts it a few minutes late)
   workflow_dispatch:            # adds a "Run workflow" button on the Actions tab
   push:
     branches: [main]            # re-publish when you edit index.html
